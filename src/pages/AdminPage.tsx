@@ -1,48 +1,50 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import AppShell from "../components/AppShell";
+import { NavLink } from "react-router-dom";
+import {
+  getDashboardStats,
+  listarUsuariosComEstatisticas,
+  getUltimosPedidos,
+  getProximasReservas,
+  alterarTipoUsuario,
+  alterarStatusPedido,
+  alterarStatusReserva,
+  listarTodosPedidos,
+  listarTodasReservas,
+  type DashboardStats,
+  type UsuarioComEstatisticas,
+  type PedidoAdmin,
+  type ReservaAdmin,
+} from "../services/AdminService";
 import { listarItensCardapio } from "../services/ItemCardapioService";
-import { faturamentoPorTipo, itensMaisVendidos } from "../services/RelatorioService";
+import { faturamentoPorTipo, itensMaisVendidos, type FaturamentoPorTipo, type ItemMaisVendido } from "../services/RelatorioService";
 import { criarSugestao, listarSugestoes } from "../services/SugestaoChefe";
-import { listarUsuarios } from "../services/UsuarioService";
 import type { ItemCardapio } from "../types/ItemCardapio";
 import type { SugestaoChefe } from "../types/SugestaoChefe";
-import type { Usuario } from "../types/Usuario";
 import { Periodo } from "../types/enums/Periodo";
 import { getErrorMessage } from "../utils/error";
-import { formatDate, getPeriodoLabel, toDateInputValue } from "../utils/formatters";
+import { formatDate, formatDateTime, getPeriodoLabel, toDateInputValue, formatarPreco } from "../utils/formatters";
+
+type AdminSection = "dashboard" | "pedidos" | "reservas" | "clientes" | "relatorios" | "sugestoes";
+
+interface AdminPageProps {
+  section?: AdminSection;
+}
 
 const today = new Date();
 const lastWeek = new Date();
 lastWeek.setDate(today.getDate() - 7);
 
-const stringifyValue = (value: unknown) => {
-  if (typeof value === "number") {
-    return value.toLocaleString("pt-BR");
-  }
-
-  if (typeof value === "string" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.join(", ");
-  }
-
-  if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, currentValue]) => `${key}: ${String(currentValue)}`)
-      .join(" | ");
-  }
-
-  return "--";
-};
-
-const AdminPage = () => {
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [usuarios, setUsuarios] = useState<UsuarioComEstatisticas[]>([]);
+  const [ultimosPedidos, setUltimosPedidos] = useState<PedidoAdmin[]>([]);
+  const [todosPedidos, setTodosPedidos] = useState<PedidoAdmin[]>([]);
+  const [proximasReservas, setProximasReservas] = useState<ReservaAdmin[]>([]);
+  const [todasReservas, setTodasReservas] = useState<ReservaAdmin[]>([]);
   const [itens, setItens] = useState<ItemCardapio[]>([]);
   const [sugestoes, setSugestoes] = useState<SugestaoChefe[]>([]);
-  const [faturamento, setFaturamento] = useState<unknown>(null);
-  const [itensVendidos, setItensVendidos] = useState<unknown>(null);
+  const [faturamento, setFaturamento] = useState<FaturamentoPorTipo[]>([]);
+  const [itensVendidos, setItensVendidos] = useState<ItemMaisVendido[]>([]);
   const [rangeStart, setRangeStart] = useState(toDateInputValue(lastWeek));
   const [rangeEnd, setRangeEnd] = useState(toDateInputValue(today));
   const [sugestaoPeriodo, setSugestaoPeriodo] = useState<Periodo>(Periodo.Almoco);
@@ -50,374 +52,644 @@ const AdminPage = () => {
   const [itemSugestaoId, setItemSugestaoId] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSavingSuggestion, setIsSavingSuggestion] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const loadDashboard = useCallback(async (refreshing = false) => {
-    if (refreshing) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-
+    refreshing ? setIsRefreshing(true) : setIsLoading(true);
     setError("");
-
-    const [usuariosResult, itensResult, sugestoesResult, faturamentoResult, itensResultReport] =
-      await Promise.allSettled([
-        listarUsuarios(),
-        listarItensCardapio(),
-        listarSugestoes(),
-        faturamentoPorTipo(rangeStart, rangeEnd),
-        itensMaisVendidos(),
-      ]);
-
-    if (usuariosResult.status === "fulfilled") {
-      setUsuarios(usuariosResult.value);
-    }
-
-    if (itensResult.status === "fulfilled") {
-      setItens(itensResult.value);
-    }
-
-    if (sugestoesResult.status === "fulfilled") {
-      setSugestoes(sugestoesResult.value);
-    }
-
-    if (faturamentoResult.status === "fulfilled") {
-      setFaturamento(faturamentoResult.value);
-    }
-
-    if (itensResultReport.status === "fulfilled") {
-      setItensVendidos(itensResultReport.value);
-    }
-
-    const firstRejected = [
-      usuariosResult,
-      itensResult,
-      sugestoesResult,
-      faturamentoResult,
-      itensResultReport,
-    ].find((result) => result.status === "rejected");
-
-    if (firstRejected?.status === "rejected") {
-      setError(
-        getErrorMessage(
-          firstRejected.reason,
-          "Alguns dados administrativos nao puderam ser carregados."
-        )
-      );
-    }
-
-    if (refreshing) {
-      setIsRefreshing(false);
-    } else {
-      setIsLoading(false);
-    }
+    const results = await Promise.allSettled([
+      getDashboardStats(),
+      listarUsuariosComEstatisticas(),
+      getUltimosPedidos(),
+      getProximasReservas(),
+      listarItensCardapio(),
+      listarSugestoes(),
+      faturamentoPorTipo(rangeStart, rangeEnd),
+      itensMaisVendidos(),
+      listarTodosPedidos(),
+      listarTodasReservas(),
+    ]);
+    const [statsR, usuariosR, pedidosR, reservasR, iR, sR, fR, ivR, tpR, trR] = results;
+    if (statsR.status === "fulfilled") setDashboardStats(statsR.value);
+    if (usuariosR.status === "fulfilled") setUsuarios(usuariosR.value);
+    if (pedidosR.status === "fulfilled") setUltimosPedidos(pedidosR.value);
+    if (reservasR.status === "fulfilled") setProximasReservas(reservasR.value);
+    if (iR.status === "fulfilled") setItens(iR.value);
+    if (sR.status === "fulfilled") setSugestoes(sR.value);
+    if (fR.status === "fulfilled") setFaturamento(fR.value);
+    if (ivR.status === "fulfilled") setItensVendidos(ivR.value);
+    if (tpR.status === "fulfilled") setTodosPedidos(tpR.value);
+    if (trR.status === "fulfilled") setTodasReservas(trR.value);
+    const fail = results.find(r => r.status === "rejected");
+    if (fail?.status === "rejected") setError(getErrorMessage(fail.reason, "Erro ao carregar dados do painel."));
+    refreshing ? setIsRefreshing(false) : setIsLoading(false);
   }, [rangeEnd, rangeStart]);
 
-  useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
-  const availableSuggestionItems = useMemo(
-    () => itens.filter((item) => item.periodo === sugestaoPeriodo),
-    [itens, sugestaoPeriodo]
-  );
+  const availableItems = useMemo(
+    () => itens.filter(i => i.periodo === sugestaoPeriodo), [itens, sugestaoPeriodo]);
 
   useEffect(() => {
-    if (!availableSuggestionItems.length) {
-      setItemSugestaoId(0);
-      return;
+    if (!availableItems.length) { setItemSugestaoId(0); return; }
+    if (!availableItems.some(i => i.id === itemSugestaoId)) setItemSugestaoId(availableItems[0].id);
+  }, [availableItems, itemSugestaoId]);
+
+  const handleRefresh = () => void loadDashboard(true);
+
+  const handleChangeUserType = async (userId: number, novoTipo: string) => {
+    setError(""); setSuccess("");
+    try {
+      await alterarTipoUsuario(userId, novoTipo);
+      setUsuarios(prev => prev.map(u =>
+        u.id === userId ? { ...u, tipoUsuario: novoTipo } : u
+      ));
+      setSuccess(`Tipo do usuario #${userId} alterado para ${novoTipo}.`);
+    } catch (err) {
+      setError(getErrorMessage(err, "Erro ao alterar tipo do usuario."));
     }
+  };
 
-    const isSelectedItemStillValid = availableSuggestionItems.some(
-      (item) => item.id === itemSugestaoId
-    );
-
-    if (!isSelectedItemStillValid) {
-      setItemSugestaoId(availableSuggestionItems[0].id);
+  const handleChangeOrderStatus = async (pedidoId: number, novoStatus: string) => {
+    setError(""); setSuccess("");
+    try {
+      await alterarStatusPedido(pedidoId, novoStatus);
+      setTodosPedidos(prev => prev.map(p =>
+        p.id === pedidoId ? { ...p, status: novoStatus } : p
+      ));
+      setUltimosPedidos(prev => prev.map(p =>
+        p.id === pedidoId ? { ...p, status: novoStatus } : p
+      ));
+      setSuccess(`Status do pedido #${pedidoId} alterado para ${novoStatus}.`);
+    } catch (err) {
+      setError(getErrorMessage(err, "Erro ao alterar status do pedido."));
     }
-  }, [availableSuggestionItems, itemSugestaoId]);
+  };
 
-  const dashboardStats = useMemo(
-    () => [
-      { label: "Usuarios", value: usuarios.length.toString() },
-      { label: "Itens de cardapio", value: itens.length.toString() },
-      { label: "Sugestoes cadastradas", value: sugestoes.length.toString() },
-      {
-        label: "Sugestoes ativas no cardapio",
-        value: itens.filter((item) => item.ehSugestaoDoChefe).length.toString(),
-      },
-    ],
-    [itens, sugestoes.length, usuarios.length]
-  );
-
-  const renderReport = (title: string, data: unknown) => {
-    if (!data) {
-      return (
-        <article className="panel panel--soft">
-          <strong>{title}</strong>
-          <p>Sem dados disponiveis para esse relatorio.</p>
-        </article>
-      );
+  const handleChangeReservationStatus = async (reservaId: number, novoStatus: string) => {
+    setError(""); setSuccess("");
+    try {
+      await alterarStatusReserva(reservaId, novoStatus);
+      setTodasReservas(prev => prev.map(r =>
+        r.id === reservaId ? { ...r, statusReserva: novoStatus } : r
+      ));
+      setProximasReservas(prev => prev.map(r =>
+        r.id === reservaId ? { ...r, statusReserva: novoStatus } : r
+      ));
+      setSuccess(`Status da reserva #${reservaId} alterado para ${novoStatus}.`);
+    } catch (err) {
+      setError(getErrorMessage(err, "Erro ao alterar status da reserva."));
     }
+  };
 
-    if (Array.isArray(data)) {
-      return (
-        <div className="report-grid">
-          {data.map((item, index) => (
-            <article className="panel panel--soft" key={`${title}-${index}`}>
-              <strong>{title} #{index + 1}</strong>
-              {item && typeof item === "object" ? (
-                <div className="data-list">
-                  {Object.entries(item as Record<string, unknown>).map(([key, value]) => (
-                    <div className="data-list__row" key={key}>
-                      <span>{key}</span>
-                      <strong>{stringifyValue(value)}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p>{stringifyValue(item)}</p>
-              )}
-            </article>
-          ))}
-        </div>
-      );
+  const handleCreateSuggestion = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(""); setSuccess("");
+    if (!itemSugestaoId) { setError("Selecione um item."); return; }
+    setIsSaving(true);
+    try {
+      await criarSugestao({ dataSugestao: sugestaoData, periodo: sugestaoPeriodo, itemCardapioId: itemSugestaoId });
+      setSugestoes(await listarSugestoes());
+      setSuccess("Sugestao do chef cadastrada com sucesso.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Erro ao salvar sugestao."));
+    } finally {
+      setIsSaving(false);
     }
+  };
 
-    if (data && typeof data === "object") {
-      return (
-        <div className="report-grid">
-          {Object.entries(data as Record<string, unknown>).map(([key, value]) => (
-            <article className="panel panel--soft" key={`${title}-${key}`}>
-              <strong>{key}</strong>
-              <p>{stringifyValue(value)}</p>
-            </article>
-          ))}
-        </div>
-      );
-    }
+  const sectionTitle: Record<AdminSection, string> = {
+    dashboard: "Dashboard",
+    pedidos: "Gestao de Pedidos",
+    reservas: "Gestao de Reservas",
+    clientes: "Gestao de Clientes",
+    relatorios: "Relatorios",
+    sugestoes: "Sugestao do Chef",
+  };
+
+  const renderDashboard = () => {
+    if (!dashboardStats) return null;
+    const kpis = [
+      { label: "Usuarios", value: dashboardStats.totalUsuarios, sub: `${dashboardStats.totalAdministradores} admins` },
+      { label: "Pedidos", value: dashboardStats.totalPedidos, sub: `${dashboardStats.pedidosHoje} hoje` },
+      { label: "Reservas", value: dashboardStats.totalReservas, sub: `${dashboardStats.reservasHoje} hoje` },
+      { label: "Faturamento", value: formatarPreco(dashboardStats.faturamentoTotal), sub: `${formatarPreco(dashboardStats.faturamentoMes)} no mes` },
+      { label: "Atendimentos", value: dashboardStats.totalAtendimentos, sub: `${dashboardStats.atendimentosPresencial} presenciais` },
+      { label: "Delivery Proprio", value: dashboardStats.atendimentosDelivery, sub: "entregas proprias" },
+      { label: "Delivery App", value: dashboardStats.atendimentosApp, sub: "via aplicativo" },
+      { label: "Cardapio", value: dashboardStats.totalItensCardapio, sub: `${dashboardStats.itensAlmoco} almoco / ${dashboardStats.itensJantar} jantar` },
+    ];
 
     return (
-      <article className="panel panel--soft">
-        <strong>{title}</strong>
-        <p>{stringifyValue(data)}</p>
-      </article>
+      <>
+        <div className="admin-stats">
+          {kpis.map(kpi => (
+            <div className="admin-stat" key={kpi.label}>
+              <span className="admin-stat__value">{kpi.value}</span>
+              <span className="admin-stat__label">{kpi.label}</span>
+              <span className="admin-stat__sub">{kpi.sub}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="admin-grid">
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Pedidos recentes</span>
+                <h3 className="card__title">Ultimos pedidos registrados</h3>
+              </div>
+              <NavLink className="btn btn--ghost btn--sm" to="/admin/pedidos">
+                Ver todos
+              </NavLink>
+            </div>
+            {ultimosPedidos.length === 0 ? (
+              <div className="empty">Nenhum pedido recente.</div>
+            ) : (
+              <div className="admin-list">
+                {ultimosPedidos.slice(0, 5).map(pedido => (
+                  <div key={pedido.id} className="admin-list__item">
+                    <div>
+                      <strong>{pedido.usuarioNome}</strong>
+                      <span className="admin-list__meta">{formatDateTime(pedido.dataHora)} - {pedido.tipoAtendimento}</span>
+                    </div>
+                    <div className="admin-list__right">
+                      <span className="admin-list__value">{formatarPreco(pedido.total)}</span>
+                      <span className={`pill pill--sm pill--${pedido.status?.toLowerCase() === "concluido" ? "success" : "outline"}`}>
+                        {pedido.status || "Pendente"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Reservas proximas</span>
+                <h3 className="card__title">Proximas reservas agendadas</h3>
+              </div>
+              <NavLink className="btn btn--ghost btn--sm" to="/admin/reservas">
+                Ver todas
+              </NavLink>
+            </div>
+            {proximasReservas.length === 0 ? (
+              <div className="empty">Nenhuma reserva proxima.</div>
+            ) : (
+              <div className="admin-list">
+                {proximasReservas.slice(0, 5).map(reserva => (
+                  <div key={reserva.id} className="admin-list__item">
+                    <div>
+                      <strong>{reserva.usuarioNome}</strong>
+                      <span className="admin-list__meta">{formatDateTime(reserva.dataHoraReserva)} - Mesa {reserva.mesaNumero}</span>
+                    </div>
+                    <div className="admin-list__right">
+                      <span>{reserva.quantidadePessoas} pessoas</span>
+                      <span className={`pill pill--sm pill--${reserva.statusReserva?.toLowerCase() === "ativa" ? "success" : "outline"}`}>
+                        {reserva.statusReserva}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="admin-grid">
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Acesso rapido</span>
+                <h3 className="card__title">Gestao do restaurante</h3>
+              </div>
+            </div>
+            <div className="admin-quick-links">
+              <NavLink className="admin-quick-link" to="/admin/ingredientes">
+                <strong>Ingredientes</strong>
+                <span>Gerenciar ingredientes do cardapio</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/mesas">
+                <strong>Mesas</strong>
+                <span>Gerenciar mesas do restaurante</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/sugestoes">
+                <strong>Sugestoes do Chef</strong>
+                <span>Ver todas as sugestoes cadastradas</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/cardapio">
+                <strong>Cardapio</strong>
+                <span>Visualizar cardapio publico</span>
+              </NavLink>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Resumo financeiro</span>
+                <h3 className="card__title">Faturamento por tipo</h3>
+              </div>
+            </div>
+            {faturamento.length === 0 ? (
+              <div className="empty">Sem dados de faturamento.</div>
+            ) : (
+              <div className="admin-list">
+                {faturamento.map((item, i) => (
+                  <div key={i} className="admin-list__item">
+                    <div>
+                      <strong>{item.tipoAtendimento}</strong>
+                      <span className="admin-list__meta">{item.quantidadePedidos} pedidos</span>
+                    </div>
+                    <span className="admin-list__value">{formatarPreco(item.totalFaturado)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </>
     );
   };
 
-  const handleRefreshReports = async () => {
-    await loadDashboard(true);
-  };
+  const renderPedidos = () => (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <span className="card__label">Gestao de pedidos</span>
+          <h3 className="card__title">Todos os pedidos ({todosPedidos.length})</h3>
+        </div>
+      </div>
+      {todosPedidos.length === 0 ? (
+        <div className="empty">Nenhum pedido encontrado.</div>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>Data</th>
+                <th>Periodo</th>
+                <th>Tipo</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todosPedidos.map(pedido => (
+                <tr key={pedido.id}>
+                  <td>#{pedido.id}</td>
+                  <td>
+                    <strong>{pedido.usuarioNome}</strong>
+                    <span className="admin-table__sub">{pedido.usuarioEmail}</span>
+                  </td>
+                  <td>{formatDateTime(pedido.dataHora)}</td>
+                  <td>{pedido.periodo}</td>
+                  <td>{pedido.tipoAtendimento}</td>
+                  <td className="admin-table__value">{formatarPreco(pedido.total)}</td>
+                  <td>
+                    <span className={`pill pill--sm pill--${pedido.status?.toLowerCase() === "concluido" ? "success" : pedido.status?.toLowerCase() === "cancelado" ? "danger" : "outline"}`}>
+                      {pedido.status || "Pendente"}
+                    </span>
+                  </td>
+                  <td>
+                    <select
+                      className="admin-table__select"
+                      value=""
+                      onChange={e => {
+                        if (e.target.value) void handleChangeOrderStatus(pedido.id, e.target.value);
+                      }}
+                    >
+                      <option value="">Alterar...</option>
+                      <option value="Pendente">Pendente</option>
+                      <option value="EmPreparo">Em Preparo</option>
+                      <option value="Pronto">Pronto</option>
+                      <option value="Entregue">Entregue</option>
+                      <option value="Concluido">Concluido</option>
+                      <option value="Cancelado">Cancelado</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
-  const handleCreateSuggestion = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
+  const renderReservas = () => (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <span className="card__label">Gestao de reservas</span>
+          <h3 className="card__title">Todas as reservas ({todasReservas.length})</h3>
+        </div>
+      </div>
+      {todasReservas.length === 0 ? (
+        <div className="empty">Nenhuma reserva encontrada.</div>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>Data/Hora</th>
+                <th>Mesa</th>
+                <th>Pessoas</th>
+                <th>Codigo</th>
+                <th>Status</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todasReservas.map(reserva => (
+                <tr key={reserva.id}>
+                  <td>#{reserva.id}</td>
+                  <td>
+                    <strong>{reserva.usuarioNome}</strong>
+                    <span className="admin-table__sub">{reserva.usuarioEmail}</span>
+                  </td>
+                  <td>{formatDateTime(reserva.dataHoraReserva)}</td>
+                  <td>Mesa {reserva.mesaNumero} ({reserva.mesaCapacidade} lug.)</td>
+                  <td>{reserva.quantidadePessoas}</td>
+                  <td>{reserva.codigoConfirmacao || "--"}</td>
+                  <td>
+                    <span className={`pill pill--sm pill--${reserva.statusReserva?.toLowerCase() === "ativa" || reserva.statusReserva?.toLowerCase() === "confirmada" ? "success" : reserva.statusReserva?.toLowerCase() === "cancelada" ? "danger" : "outline"}`}>
+                      {reserva.statusReserva}
+                    </span>
+                  </td>
+                  <td>
+                    <select
+                      className="admin-table__select"
+                      value=""
+                      onChange={e => {
+                        if (e.target.value) void handleChangeReservationStatus(reserva.id, e.target.value);
+                      }}
+                    >
+                      <option value="">Alterar...</option>
+                      <option value="Ativa">Ativa</option>
+                      <option value="Confirmada">Confirmada</option>
+                      <option value="Finalizada">Finalizada</option>
+                      <option value="Cancelada">Cancelada</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
-    if (!itemSugestaoId) {
-      setError("Selecione um item valido para a sugestao do chefe.");
-      return;
-    }
+  const renderClientes = () => (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <span className="card__label">Gestao de clientes</span>
+          <h3 className="card__title">Usuarios cadastrados ({usuarios.length})</h3>
+        </div>
+      </div>
+      {usuarios.length === 0 ? (
+        <div className="empty">Nenhum usuario encontrado.</div>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Email</th>
+                <th>Tipo</th>
+                <th>Pedidos</th>
+                <th>Reservas</th>
+                <th>Ult. Pedido</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => (
+                <tr key={u.id}>
+                  <td>#{u.id}</td>
+                  <td><strong>{u.nome}</strong></td>
+                  <td>{u.email}</td>
+                  <td>
+                    <span className={`pill pill--sm pill--${u.tipoUsuario === "Administrador" ? "gold" : "outline"}`}>
+                      {u.tipoUsuario}
+                    </span>
+                  </td>
+                  <td>{u.totalPedidos}</td>
+                  <td>{u.totalReservas}</td>
+                  <td>{formatDate(u.ultimoPedido)}</td>
+                  <td>
+                    <select
+                      className="admin-table__select"
+                      value=""
+                      onChange={e => {
+                        if (e.target.value) void handleChangeUserType(u.id, e.target.value);
+                      }}
+                    >
+                      <option value="">Alterar...</option>
+                      <option value="Cliente">Cliente</option>
+                      <option value="Administrador">Administrador</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
-    setIsSavingSuggestion(true);
+  const renderRelatorios = () => (
+    <>
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Faturamento por tipo de atendimento</span>
+            <h3 className="card__title">Relatorio financeiro</h3>
+          </div>
+        </div>
+        <div className="form-grid form-grid--two" style={{ gap: "0.75rem", marginBottom: "1rem" }}>
+          <label className="field">
+            <span className="field__label">Inicio</span>
+            <input className="field__input" type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field__label">Fim</span>
+            <input className="field__input" type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} />
+          </label>
+        </div>
+        <button className="btn btn--secondary btn--sm" onClick={handleRefresh} type="button" style={{ marginBottom: "1rem" }}>
+          {isRefreshing ? "Atualizando..." : "Atualizar relatorio"}
+        </button>
+        {faturamento.length === 0 ? (
+          <div className="empty">Sem dados no periodo selecionado.</div>
+        ) : (
+          <div className="report-grid">
+            {faturamento.map((item, i) => (
+              <div className="card card--inner" key={i}>
+                <strong>{item.tipoAtendimento}</strong>
+                <div className="data-row">
+                  <span className="data-row__key">Pedidos</span>
+                  <span className="data-row__val">{item.quantidadePedidos.toLocaleString("pt-BR")}</span>
+                </div>
+                <div className="data-row">
+                  <span className="data-row__key">Faturamento</span>
+                  <span className="data-row__val">{formatarPreco(item.totalFaturado)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-    try {
-      await criarSugestao({
-        dataSugestao: sugestaoData,
-        periodo: sugestaoPeriodo,
-        itemCardapioId: itemSugestaoId,
-      });
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Itens mais vendidos</span>
+            <h3 className="card__title">Ranking de vendas</h3>
+          </div>
+        </div>
+        {itensVendidos.length === 0 ? (
+          <div className="empty">Sem dados de vendas.</div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item</th>
+                  <th>Periodo</th>
+                  <th>Vendidos</th>
+                  <th>Faturamento</th>
+                  <th>Sugestao Chef</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itensVendidos.map((item, i) => (
+                  <tr key={item.itemId}>
+                    <td>{i + 1}</td>
+                    <td><strong>{item.nomeItem}</strong></td>
+                    <td>{item.periodo}</td>
+                    <td>{item.quantidadeVendida.toLocaleString("pt-BR")}</td>
+                    <td className="admin-table__value">{formatarPreco(item.totalGerado)}</td>
+                    <td>
+                      <span className={`pill pill--sm pill--${item.ehSugestaoChefe ? "success" : "outline"}`}>
+                        {item.ehSugestaoChefe ? "Sim" : "Nao"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
 
-      const updatedSuggestions = await listarSugestoes();
-      setSugestoes(updatedSuggestions);
-      setSuccess("Sugestao do chefe cadastrada com sucesso.");
-    } catch (error) {
-      setError(
-        getErrorMessage(
-          error,
-          "Nao foi possivel salvar a sugestao do chefe."
-        )
-      );
-    } finally {
-      setIsSavingSuggestion(false);
+  const renderSugestoes = () => (
+    <div className="admin-grid">
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Cadastrar sugestao</span>
+            <h3 className="card__title">Nova sugestao do chef</h3>
+          </div>
+        </div>
+        <form className="form-grid form-grid--two" style={{ gap: "0.75rem" }} onSubmit={handleCreateSuggestion}>
+          <label className="field">
+            <span className="field__label">Data</span>
+            <input className="field__input" type="date" value={sugestaoData} onChange={e => setSugestaoData(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field__label">Periodo</span>
+            <select className="field__input" value={sugestaoPeriodo}
+              onChange={e => setSugestaoPeriodo(Number(e.target.value) as Periodo)}>
+              <option value={Periodo.Almoco}>Almoco</option>
+              <option value={Periodo.Jantar}>Jantar</option>
+            </select>
+          </label>
+          <label className="field field--full">
+            <span className="field__label">Item do cardapio</span>
+            <select className="field__input" value={itemSugestaoId}
+              onChange={e => setItemSugestaoId(Number(e.target.value))}>
+              {availableItems.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+            </select>
+          </label>
+          <button className="btn btn--primary btn--block field--full" disabled={isSaving} type="submit" style={{ marginTop: "0.25rem" }}>
+            {isSaving ? "Salvando..." : "Registrar sugestao"}
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Historico</span>
+            <h3 className="card__title">Sugestoes recentes</h3>
+          </div>
+        </div>
+        {sugestoes.length === 0 ? (
+          <div className="empty">Nenhuma sugestao cadastrada.</div>
+        ) : (
+          <div className="admin-list">
+            {sugestoes.slice(0, 8).map(s => (
+              <div key={s.id} className="admin-list__item">
+                <div>
+                  <strong>{s.nomeItem}</strong>
+                  <span className="admin-list__meta">{formatDate(s.dataSugestao)}</span>
+                </div>
+                <span className="pill pill--sm pill--outline">{getPeriodoLabel(s.periodo)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderContent = () => {
+    switch (section) {
+      case "dashboard": return renderDashboard();
+      case "pedidos": return renderPedidos();
+      case "reservas": return renderReservas();
+      case "clientes": return renderClientes();
+      case "relatorios": return renderRelatorios();
+      case "sugestoes": return renderSugestoes();
     }
   };
 
   return (
-    <AppShell contentClassName="page">
-      <section className="hero hero--compact">
-        <div className="hero__content">
-          <span className="kicker">Painel administrativo</span>
-          <h1>Usuarios, sugestoes e relatorios em uma tela pronta para defender o projeto.</h1>
-          <p className="hero__lead">
-            O admin consolida os dados mais importantes da API e da regra de
-            negocio, com foco em leitura rapida e visual forte para a entrega.
-          </p>
-        </div>
-      </section>
+    <div className="admin-page admin-page--shell">
+      <div className="section__header animate-in">
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600 }}>
+          {sectionTitle[section]}
+        </h1>
+      </div>
 
-      <section className="card-grid card-grid--four">
-        {dashboardStats.map((stat) => (
-          <article className="stat-card stat-card--panel" key={stat.label}>
-            <strong>{stat.value}</strong>
-            <span>{stat.label}</span>
-          </article>
-        ))}
-      </section>
-
-      {error ? <div className="message message--error">{error}</div> : null}
-      {success ? <div className="message message--success">{success}</div> : null}
+      {error && <div className="msg msg--error">{error}</div>}
+      {success && <div className="msg msg--success">{success}</div>}
 
       {isLoading ? (
-        <div className="loading-state panel">
-          <span className="route-status__spinner" />
-          <p>Carregando painel administrativo...</p>
-        </div>
+        <div className="loading-box"><span className="spinner" /><span>Carregando painel...</span></div>
       ) : (
-        <>
-          <div className="section-grid section-grid--two">
-            <section className="panel panel--section">
-              <div className="panel__header">
-                <div>
-                  <span className="kicker">Relatorios</span>
-                  <h2>Consulta por intervalo</h2>
-                </div>
-
-                <button
-                  className="button button--ghost"
-                  onClick={handleRefreshReports}
-                  type="button"
-                >
-                  {isRefreshing ? "Atualizando..." : "Atualizar"}
-                </button>
-              </div>
-
-              <div className="form-grid form-grid--two">
-                <label className="field">
-                  <span>Data inicial</span>
-                  <input
-                    onChange={(event) => setRangeStart(event.target.value)}
-                    type="date"
-                    value={rangeStart}
-                  />
-                </label>
-
-                <label className="field">
-                  <span>Data final</span>
-                  <input
-                    onChange={(event) => setRangeEnd(event.target.value)}
-                    type="date"
-                    value={rangeEnd}
-                  />
-                </label>
-              </div>
-
-              {renderReport("Faturamento por tipo", faturamento)}
-              {renderReport("Itens mais vendidos", itensVendidos)}
-            </section>
-
-            <section className="panel panel--section">
-              <div className="panel__header">
-                <div>
-                  <span className="kicker">Sugestao do chefe</span>
-                  <h2>Cadastrar destaque do dia</h2>
-                </div>
-              </div>
-
-              <form className="form-grid form-grid--two" onSubmit={handleCreateSuggestion}>
-                <label className="field">
-                  <span>Data</span>
-                  <input
-                    onChange={(event) => setSugestaoData(event.target.value)}
-                    type="date"
-                    value={sugestaoData}
-                  />
-                </label>
-
-                <label className="field">
-                  <span>Periodo</span>
-                  <select
-                    onChange={(event) =>
-                      setSugestaoPeriodo(Number(event.target.value) as Periodo)
-                    }
-                    value={sugestaoPeriodo}
-                  >
-                    <option value={Periodo.Almoco}>Almoco</option>
-                    <option value={Periodo.Jantar}>Jantar</option>
-                  </select>
-                </label>
-
-                <label className="field field--full">
-                  <span>Item do cardapio</span>
-                  <select
-                    onChange={(event) => setItemSugestaoId(Number(event.target.value))}
-                    value={itemSugestaoId}
-                  >
-                    {availableSuggestionItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <button
-                  className="button button--primary button--block field--full"
-                  disabled={isSavingSuggestion}
-                  type="submit"
-                >
-                  {isSavingSuggestion ? "Salvando..." : "Registrar sugestao"}
-                </button>
-              </form>
-
-              <div className="history-list history-list--compact">
-                {sugestoes.slice(0, 6).map((sugestao) => (
-                  <article className="history-card" key={sugestao.id}>
-                    <div className="history-card__header">
-                      <div>
-                        <strong>{sugestao.nomeItem}</strong>
-                        <span>{formatDate(sugestao.dataSugestao)}</span>
-                      </div>
-
-                      <span className="pill pill--highlight">
-                        {getPeriodoLabel(sugestao.periodo)}
-                      </span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <section className="panel panel--section">
-            <div className="panel__header">
-              <div>
-                <span className="kicker">Usuarios cadastrados</span>
-                <h2>Base de clientes</h2>
-              </div>
-            </div>
-
-            {usuarios.length === 0 ? (
-              <div className="empty-state">
-                <p>Nenhum usuario retornado pela API.</p>
-              </div>
-            ) : (
-              <div className="card-grid card-grid--three">
-                {usuarios.map((usuario) => (
-                  <article className="panel panel--soft" key={usuario.id}>
-                    <strong>{usuario.nome}</strong>
-                    <p>{usuario.email}</p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
+        <div className="admin-content animate-in">
+          {renderContent()}
+        </div>
       )}
-    </AppShell>
+    </div>
   );
 };
 

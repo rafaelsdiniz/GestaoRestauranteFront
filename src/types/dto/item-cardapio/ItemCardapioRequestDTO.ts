@@ -6,4 +6,5 @@ export interface ItemCardapioRequestDTO {
   precoBase: number;
   periodo: Periodo;
   ingredientesIds?: number[];
+  imagemBase64?: string;
 }

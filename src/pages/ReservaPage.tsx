@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
-import { cancelarReserva, criarReserva, listarReservas } from "../services/ReservaService";
+import { listarMesasDisponiveis } from "../services/MesaService";
+import { cancelarReserva, criarReserva, listarReservasDoUsuario } from "../services/ReservaService";
+import type { Mesa } from "../types/Mesa";
 import type { Reserva } from "../types/Reserva";
 import { StatusReserva } from "../types/enums/StatusReserva";
 import { getErrorMessage } from "../utils/error";
@@ -10,15 +12,6 @@ import {
   getStatusReservaLabel,
   toDatetimeLocalValue,
 } from "../utils/formatters";
-
-const tables = [
-  { id: 1, numero: 1, capacidade: 2 },
-  { id: 2, numero: 2, capacidade: 2 },
-  { id: 3, numero: 3, capacidade: 4 },
-  { id: 4, numero: 4, capacidade: 4 },
-  { id: 5, numero: 5, capacidade: 6 },
-  { id: 6, numero: 6, capacidade: 8 },
-];
 
 const getDefaultReservationDate = () => {
   const date = new Date();
@@ -31,7 +24,8 @@ const ReservaPage = () => {
   const { usuario } = useAuth();
   const [dataHora, setDataHora] = useState(getDefaultReservationDate());
   const [pessoas, setPessoas] = useState(2);
-  const [mesaId, setMesaId] = useState(3);
+  const [mesaId, setMesaId] = useState(0);
+  const [mesas, setMesas] = useState<Mesa[]>([]);
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,52 +35,63 @@ const ReservaPage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const loadReservations = async () => {
+    const loadData = async () => {
       setIsLoading(true);
       setError("");
 
-      try {
-        const data = await listarReservas();
+      const [mesasResult, reservasResult] = await Promise.allSettled([
+        listarMesasDisponiveis(),
+        usuario?.usuario?.id
+          ? listarReservasDoUsuario(usuario.usuario.id)
+          : Promise.resolve([]),
+      ]);
 
-        if (isMounted) {
-          setReservas(data);
+      if (!isMounted) return;
+
+      if (mesasResult.status === "fulfilled") {
+        setMesas(mesasResult.value);
+        if (mesasResult.value.length > 0 && mesaId === 0) {
+          setMesaId(mesasResult.value[0].id);
         }
-      } catch (error) {
-        if (isMounted) {
-          setError(
-            getErrorMessage(
-              error,
-              "Nao foi possivel carregar o historico de reservas."
-            )
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+      } else {
+        setError(
+          getErrorMessage(
+            mesasResult.reason,
+            "Nao foi possivel carregar as mesas disponiveis."
+          )
+        );
       }
+
+      if (reservasResult.status === "fulfilled") {
+        setReservas(reservasResult.value);
+      } else {
+        setError(
+          getErrorMessage(
+            reservasResult.reason,
+            "Nao foi possivel carregar o historico de reservas."
+          )
+        );
+      }
+
+      setIsLoading(false);
     };
 
-    void loadReservations();
+    void loadData();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [usuario?.usuario?.id]);
 
   const reservasDoUsuario = useMemo(() => {
-    const nomeUsuario = usuario?.nomeUsuario.toLowerCase();
+    return reservas.sort(
+      (left, right) =>
+        new Date(left.dataHoraReserva).getTime() -
+        new Date(right.dataHoraReserva).getTime()
+    );
+  }, [reservas]);
 
-    return reservas
-      .filter((reserva) => reserva.nomeUsuario.toLowerCase() === nomeUsuario)
-      .sort(
-        (left, right) =>
-          new Date(left.dataHoraReserva).getTime() -
-          new Date(right.dataHoraReserva).getTime()
-      );
-  }, [reservas, usuario?.nomeUsuario]);
-
-  const selectedTable = tables.find((table) => table.id === mesaId);
+  const selectedTable = mesas.find((table) => table.id === mesaId);
 
   const validateReservation = () => {
     const reservationDate = new Date(dataHora);
@@ -136,7 +141,7 @@ const ReservaPage = () => {
     setIsSubmitting(true);
 
     try {
-      const novaReserva = await criarReserva(usuario.usuarioId, {
+      const novaReserva = await criarReserva(usuario?.usuario?.id, {
         dataHoraReserva: dataHora,
         quantidadePessoas: pessoas,
         mesaId,
@@ -164,7 +169,10 @@ const ReservaPage = () => {
     setSuccess("");
 
     try {
-      await cancelarReserva(reservationId);
+      if (!usuario?.usuario?.id) {
+        throw new Error("Usuário não autenticado.");
+      }
+      await cancelarReserva(usuario.usuario.id, reservationId);
 
       setReservas((previous) =>
         previous.map((reserva) =>
@@ -189,11 +197,11 @@ const ReservaPage = () => {
     <AppShell contentClassName="page">
       <section className="hero hero--compact">
         <div className="hero__content">
-          <span className="kicker">Modulo de reservas</span>
-          <h1>Reserve mesas para o jantar com regras claras e boa apresentacao.</h1>
+          <span className="kicker">Reservas</span>
+          <h1>Reserve sua mesa</h1>
           <p className="hero__lead">
-            A tela concentra a validacao de antecedencia, janela de horario e
-            capacidade da mesa, deixando o requisito bem evidente para a entrega.
+            Agende uma mesa para o jantar entre 19h e 22h com pelo menos
+            um dia de antecedencia. Escolha a mesa pela capacidade.
           </p>
         </div>
       </section>
@@ -236,7 +244,7 @@ const ReservaPage = () => {
                 onChange={(event) => setMesaId(Number(event.target.value))}
                 value={mesaId}
               >
-                {tables.map((table) => (
+                {mesas.map((table) => (
                   <option key={table.id} value={table.id}>
                     Mesa {table.numero} | {table.capacidade} lugares
                   </option>
@@ -274,8 +282,8 @@ const ReservaPage = () => {
         <section className="panel panel--section">
           <div className="panel__header">
             <div>
-              <span className="kicker">Regras destacadas</span>
-              <h2>O que a banca vai enxergar na tela</h2>
+              <span className="kicker">Regras</span>
+              <h2>Informacoes importantes</h2>
             </div>
           </div>
 

@@ -2,22 +2,51 @@ import api from "./api";
 import type { Reserva } from "../types/Reserva";
 import type { ReservaRequestDTO } from "../types/dto/reserva/ReservaRequestDTO";
 
-export const criarReserva = async (usuarioId: number, dto: ReservaRequestDTO) => {
-  const { data } = await api.post<Reserva>(`/reservas/${usuarioId}`, dto);
+// =========================
+// CRIAR RESERVA
+// =========================
+export const criarReserva = async (
+  usuarioId: number,
+  dto: ReservaRequestDTO
+): Promise<Reserva> => {
+  const { data } = await api.post<Reserva>(
+    `/usuarios/${usuarioId}/reservas`,
+    dto
+  );
   return data;
 };
 
-export const listarReservas = async () => {
-  const { data } = await api.get<Reserva[]>("/reservas");
+// =========================
+// LISTAR RESERVAS DO USUÁRIO
+// =========================
+export const listarReservasDoUsuario = async (
+  usuarioId: number
+): Promise<Reserva[]> => {
+  const { data } = await api.get<Reserva[]>(
+    `/usuarios/${usuarioId}/reservas`
+  );
   return data;
 };
 
-export const buscarReservaPorId = async (id: number) => {
-  const { data } = await api.get<Reserva>(`/reservas/${id}`);
+// =========================
+// BUSCAR RESERVA POR ID
+// =========================
+export const buscarReservaPorId = async (
+  usuarioId: number,
+  id: number
+): Promise<Reserva> => {
+  const { data } = await api.get<Reserva>(
+    `/usuarios/${usuarioId}/reservas/${id}`
+  );
   return data;
 };
 
-export const cancelarReserva = async (id: number) => {
-  const { data } = await api.put<boolean>(`/reservas/${id}/cancelar`);
-  return data;
+// =========================
+// CANCELAR RESERVA
+// =========================
+export const cancelarReserva = async (
+  usuarioId: number,
+  id: number
+): Promise<void> => {
+  await api.put(`/usuarios/${usuarioId}/reservas/${id}/cancelar`);
 };

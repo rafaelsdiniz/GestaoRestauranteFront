@@ -12,14 +12,14 @@ const loginBenefits = [
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, isReady, login } = useAuth();
+  const { isAuthenticated, isAdmin, isReady, login } = useAuth();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isReady && isAuthenticated) {
-    return <Navigate replace to="/pedidos" />;
+    return <Navigate replace to={isAdmin ? "/admin" : "/pedidos"} />;
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -28,8 +28,9 @@ const LoginPage = () => {
     setIsSubmitting(true);
 
     try {
-      await login({ email, senha });
-      navigate("/pedidos", { replace: true });
+      const response = await login({ email, senha });
+      const userIsAdmin = response.admin === true || response.tipoUsuario === "Administrador";
+      navigate(userIsAdmin ? "/admin" : "/pedidos", { replace: true });
     } catch (error) {
       setErro(
         getErrorMessage(
@@ -46,11 +47,11 @@ const LoginPage = () => {
     <AppShell contentClassName="page page--auth">
       <section className="auth-layout">
         <article className="panel auth-panel auth-panel--highlight">
-          <span className="kicker">Entrar na plataforma</span>
-          <h1>Seu restaurante agora tem uma porta de entrada com presenca.</h1>
+          <span className="kicker">Bem-vindo de volta</span>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600, lineHeight: 1.2 }}>Entre para acessar pedidos, reservas e mais.</h1>
           <p className="hero__lead">
-            O login libera os modulos protegidos do trabalho e conecta o usuario
-            aos pedidos, reservas e administracao em uma navegacao fluida.
+            Faca login para montar pedidos, reservar mesas e acompanhar
+            seu historico no Bravo.
           </p>
 
           <div className="rule-list">
@@ -63,7 +64,7 @@ const LoginPage = () => {
           </div>
 
           <div className="auth-panel__brand">
-            <img src="/codefood.png" alt="CodeFood" />
+            <img src="/bravologo.png" alt="Bravo" />
           </div>
         </article>
 
@@ -81,7 +82,7 @@ const LoginPage = () => {
               <input
                 autoComplete="email"
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="voce@codefood.com"
+                placeholder="voce@bravo.com"
                 required
                 type="email"
                 value={email}

@@ -8,4 +8,5 @@ export interface ItemCardapio extends BaseEntity {
   periodo: Periodo;
   ehSugestaoDoChefe: boolean;
   ingredientes: string[];
+  imagemBase64?: string;
 }

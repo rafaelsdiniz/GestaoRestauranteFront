@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
-import { listarItensCardapio } from "../services/ItemCardapioService";
+import {
+  listarIngredientes,
+} from "../services/IngredienteService";
+import {
+  atualizarItemCardapio,
+  criarItemCardapio,
+  deletarItemCardapio,
+  listarItensCardapio,
+} from "../services/ItemCardapioService";
 import { listarSugestoes } from "../services/SugestaoChefe";
+import type { Ingrediente } from "../types/Ingrediente";
 import type { ItemCardapio } from "../types/ItemCardapio";
+import type { ItemCardapioRequestDTO } from "../types/dto/item-cardapio/ItemCardapioRequestDTO";
 import type { SugestaoChefe } from "../types/SugestaoChefe";
 import { Periodo } from "../types/enums/Periodo";
 import { getErrorMessage } from "../utils/error";
@@ -15,34 +25,33 @@ import {
   toDateInputValue,
 } from "../utils/formatters";
 
-const serviceModes = [
-  {
-    title: "Presencial",
-    text: "Pedidos no restaurante com fluxo rapido para atendimento em mesa e operacao local.",
-  },
-  {
-    title: "Delivery proprio",
-    text: "Experiencia de entrega com taxa fixa, observacao de endereco e rastreio administrativo.",
-  },
-  {
-    title: "Delivery por aplicativo",
-    text: "Pedido integrado a parceiros com comissao variavel por periodo e destaque comercial.",
-  },
-];
+interface CardapioPageProps {
+  noShell?: boolean;
+}
 
-const businessRules = [
-  "Somente um item de almoco e um item de jantar podem ser Sugestao do Chefe por dia.",
-  "O desconto de 20% so vale para o periodo e a data corretos.",
-  "Reservas ficam concentradas na faixa do jantar, entre 19h e 22h.",
-  "Cada pedido respeita o periodo escolhido e calcula taxa de atendimento.",
-];
+const emptyForm: ItemCardapioRequestDTO = {
+  nome: "",
+  descricao: "",
+  precoBase: 0,
+  periodo: Periodo.Almoco,
+  ingredientesIds: [],
+  imagemBase64: "",
+};
 
-const CardapioPage = () => {
+const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
   const { isAuthenticated } = useAuth();
   const [itens, setItens] = useState<ItemCardapio[]>([]);
   const [sugestoes, setSugestoes] = useState<SugestaoChefe[]>([]);
+  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Admin form state
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formData, setFormData] = useState<ItemCardapioRequestDTO>(emptyForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -51,39 +60,44 @@ const CardapioPage = () => {
       setIsLoading(true);
       setError("");
 
-      const [itensResult, sugestoesResult] = await Promise.allSettled([
+      const promises: Promise<unknown>[] = [
         listarItensCardapio(),
         listarSugestoes(),
-      ]);
+      ];
 
-      if (!isMounted) {
-        return;
+      if (noShell) {
+        promises.push(listarIngredientes());
       }
 
-      if (itensResult.status === "fulfilled") {
-        setItens(itensResult.value);
+      const results = await Promise.allSettled(promises);
+
+      if (!isMounted) return;
+
+      if (results[0].status === "fulfilled") {
+        setItens(results[0].value as ItemCardapio[]);
       } else {
         setError(
           getErrorMessage(
-            itensResult.reason,
+            (results[0] as PromiseRejectedResult).reason,
             "Nao foi possivel carregar o cardapio."
           )
         );
       }
 
-      if (sugestoesResult.status === "fulfilled") {
-        setSugestoes(sugestoesResult.value);
+      if (results[1].status === "fulfilled") {
+        setSugestoes(results[1].value as SugestaoChefe[]);
+      }
+
+      if (results[2]?.status === "fulfilled") {
+        setIngredientes(results[2].value as Ingrediente[]);
       }
 
       setIsLoading(false);
     };
 
     void loadData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    return () => { isMounted = false; };
+  }, [noShell]);
 
   const itensAlmoco = useMemo(
     () => itens.filter((item) => item.periodo === Periodo.Almoco),
@@ -116,34 +130,119 @@ const CardapioPage = () => {
 
   const dashboardStats = useMemo(
     () => [
-      {
-        value: `${itens.length}`,
-        label: "itens conectados ao backend",
-      },
-      {
-        value: "20%",
-        label: "desconto da sugestao do chefe",
-      },
-      {
-        value: "3",
-        label: "modos de atendimento da operacao",
-      },
-      {
-        value: "19h-22h",
-        label: "janela sugerida para reservas",
-      },
+      { value: `${itens.length}`, label: "itens conectados ao backend" },
+      { value: "20%", label: "desconto da sugestao do chefe" },
+      { value: "3", label: "modos de atendimento da operacao" },
+      { value: "19h-22h", label: "janela sugerida para reservas" },
     ],
     [itens.length]
   );
+
+  // ── Admin helpers ──
+
+  const handleEdit = (item: ItemCardapio) => {
+    setEditingId(item.id);
+    setFormData({
+      nome: item.nome,
+      descricao: item.descricao,
+      precoBase: item.precoBase,
+      periodo: item.periodo,
+      ingredientesIds: [],
+      imagemBase64: item.imagemBase64 ?? "",
+    });
+    setFormError("");
+    setFormSuccess("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData(emptyForm);
+    setFormError("");
+    setFormSuccess("");
+  };
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setFormError("Imagem deve ter no maximo 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({ ...prev, imagemBase64: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setFormData((prev) => ({ ...prev, imagemBase64: "" }));
+  };
+
+  const toggleIngrediente = (id: number) => {
+    setFormData((prev) => {
+      const ids = prev.ingredientesIds ?? [];
+      return {
+        ...prev,
+        ingredientesIds: ids.includes(id)
+          ? ids.filter((i) => i !== id)
+          : [...ids, id],
+      };
+    });
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+    setIsSubmitting(true);
+
+    try {
+      if (editingId) {
+        const updated = await atualizarItemCardapio(editingId, formData);
+        setItens((prev) => prev.map((i) => (i.id === editingId ? updated : i)));
+        setFormSuccess("Item atualizado com sucesso.");
+      } else {
+        const created = await criarItemCardapio(formData);
+        setItens((prev) => [...prev, created]);
+        setFormSuccess("Item criado com sucesso.");
+      }
+      setEditingId(null);
+      setFormData(emptyForm);
+    } catch (err) {
+      setFormError(
+        getErrorMessage(err, editingId ? "Erro ao atualizar item." : "Erro ao criar item.")
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Tem certeza que deseja excluir este item?")) return;
+    try {
+      await deletarItemCardapio(id);
+      setItens((prev) => prev.filter((i) => i.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        setFormData(emptyForm);
+      }
+    } catch (err) {
+      setFormError(getErrorMessage(err, "Erro ao excluir item."));
+    }
+  };
+
+  // ── Render helpers ──
 
   const renderItemGrid = (periodoLabel: string, menu: ItemCardapio[]) => (
     <section className="panel panel--section">
       <div className="panel__header">
         <div>
           <span className="kicker">{periodoLabel}</span>
-          <h2>{periodoLabel} com cara de produto final</h2>
+          <h2>{periodoLabel}</h2>
         </div>
-
         <span className="pill">{menu.length} itens</span>
       </div>
 
@@ -160,34 +259,49 @@ const CardapioPage = () => {
 
             return (
               <article className="menu-card" key={item.id}>
-                <div className="menu-card__head">
-                  <div>
-                    <span className="pill pill--outline">
-                      {getPeriodoLabel(item.periodo)}
-                    </span>
+                {item.imagemBase64 ? (
+                  <img className="menu-card__img" src={item.imagemBase64} alt={item.nome} />
+                ) : (
+                  <div className="menu-card__img-placeholder">Sem foto</div>
+                )}
 
-                    {item.ehSugestaoDoChefe ? (
-                      <span className="pill pill--highlight">
-                        Sugestao do Chefe
+                <div className="menu-card__body">
+                  <div className="menu-card__head">
+                    <div>
+                      <span className="pill pill--outline">
+                        {getPeriodoLabel(item.periodo)}
                       </span>
-                    ) : null}
+                      {item.ehSugestaoDoChefe ? (
+                        <span className="pill pill--highlight">Sugestao do Chefe</span>
+                      ) : null}
+                    </div>
+                    <strong>{formatCurrency(precoFinal)}</strong>
                   </div>
 
-                  <strong>{formatCurrency(precoFinal)}</strong>
-                </div>
+                  <h3>{item.nome}</h3>
+                  <p>{item.descricao}</p>
 
-                <h3>{item.nome}</h3>
-                <p>{item.descricao}</p>
+                  <div className="tag-list">
+                    {item.ingredientes?.length ? (
+                      item.ingredientes.slice(0, 4).map((ingrediente) => (
+                        <span className="tag" key={`${item.id}-${ingrediente}`}>
+                          {ingrediente}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="tag">Sem ingredientes informados</span>
+                    )}
+                  </div>
 
-                <div className="tag-list">
-                  {item.ingredientes?.length ? (
-                    item.ingredientes.slice(0, 4).map((ingrediente) => (
-                      <span className="tag" key={`${item.id}-${ingrediente}`}>
-                        {ingrediente}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="tag">Sem ingredientes informados</span>
+                  {noShell && (
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                      <button className="btn btn--sm btn--secondary" onClick={() => handleEdit(item)} type="button">
+                        Editar
+                      </button>
+                      <button className="btn btn--sm btn--ghost" onClick={() => handleDelete(item.id)} type="button">
+                        Excluir
+                      </button>
+                    </div>
                   )}
                 </div>
               </article>
@@ -198,139 +312,208 @@ const CardapioPage = () => {
     </section>
   );
 
-  return (
-    <AppShell contentClassName="page page--landing">
-      <section className="hero hero--landing">
+  const renderAdminForm = () => (
+    <section className="panel panel--section">
+      <div className="panel__header">
+        <div>
+          <span className="kicker">{editingId ? "Editar" : "Novo"} item</span>
+          <h2>{editingId ? "Editar Item do Cardapio" : "Adicionar Item ao Cardapio"}</h2>
+        </div>
+      </div>
+
+      <form className="form-grid form-grid--two" onSubmit={handleSubmit}>
+        <label className="field">
+          <span>Nome</span>
+          <input
+            type="text"
+            required
+            placeholder="Nome do prato"
+            value={formData.nome}
+            onChange={(e) => setFormData((p) => ({ ...p, nome: e.target.value }))}
+          />
+        </label>
+
+        <label className="field">
+          <span>Preco base (R$)</span>
+          <input
+            type="number"
+            required
+            min={0}
+            step={0.01}
+            placeholder="0.00"
+            value={formData.precoBase || ""}
+            onChange={(e) => setFormData((p) => ({ ...p, precoBase: Number(e.target.value) }))}
+          />
+        </label>
+
+        <label className="field field--full">
+          <span>Descricao</span>
+          <textarea
+            required
+            rows={3}
+            placeholder="Descreva o prato"
+            value={formData.descricao}
+            onChange={(e) => setFormData((p) => ({ ...p, descricao: e.target.value }))}
+          />
+        </label>
+
+        <label className="field">
+          <span>Periodo</span>
+          <select
+            value={formData.periodo}
+            onChange={(e) => setFormData((p) => ({ ...p, periodo: Number(e.target.value) as Periodo }))}
+          >
+            <option value={Periodo.Almoco}>Almoco</option>
+            <option value={Periodo.Jantar}>Jantar</option>
+          </select>
+        </label>
+
+        <div className="field">
+          <span>Ingredientes</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.25rem" }}>
+            {ingredientes.map((ing) => {
+              const selected = formData.ingredientesIds?.includes(ing.id);
+              return (
+                <button
+                  key={ing.id}
+                  type="button"
+                  className={`pill ${selected ? "pill--highlight" : "pill--outline"}`}
+                  onClick={() => toggleIngrediente(ing.id)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {ing.nome}
+                </button>
+              );
+            })}
+            {ingredientes.length === 0 && (
+              <span style={{ fontSize: "0.82rem", color: "var(--cream-muted)" }}>
+                Nenhum ingrediente cadastrado.
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="image-upload">
+          <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--cream-muted)" }}>
+            Foto do prato
+          </span>
+          {formData.imagemBase64 ? (
+            <div className="image-upload__preview">
+              <img src={formData.imagemBase64} alt="Preview" />
+              <button className="image-upload__remove" onClick={handleRemoveImage} type="button">
+                &times;
+              </button>
+            </div>
+          ) : (
+            <div className="image-upload__dropzone">
+              <input type="file" accept="image/*" onChange={handleImageChange} />
+              <div className="image-upload__icon">&#128247;</div>
+              <p className="image-upload__label">
+                <strong>Clique para enviar</strong> ou arraste a imagem<br />
+                PNG, JPG ate 2MB
+              </p>
+            </div>
+          )}
+        </div>
+
+        {formError && <div className="message message--error field--full">{formError}</div>}
+        {formSuccess && <div className="message message--success field--full">{formSuccess}</div>}
+
+        <div className="field--full" style={{ display: "flex", gap: "0.5rem" }}>
+          <button className="btn btn--primary" disabled={isSubmitting} type="submit">
+            {isSubmitting
+              ? "Salvando..."
+              : editingId
+                ? "Salvar alteracoes"
+                : "Adicionar item"}
+          </button>
+          {editingId && (
+            <button className="btn btn--secondary" onClick={handleCancelEdit} type="button">
+              Cancelar
+            </button>
+          )}
+        </div>
+      </form>
+    </section>
+  );
+
+  // ── Client-facing content ──
+
+  const clientContent = (
+    <>
+      <section className="hero hero--compact">
         <div className="hero__content">
-          <span className="kicker">A1 | Sistema de Gestao de Restaurante</span>
-          <h1>Landing page, cardapio e fluxo do restaurante no mesmo pulso.</h1>
+          <span className="kicker">Cardapio</span>
+          <h1>Nosso cardapio completo</h1>
           <p className="hero__lead">
-            O front do CodeFood agora apresenta o trabalho com visual proprio,
-            leitura clara das regras de negocio e portas de entrada para
-            cadastro, pedidos, reservas e administracao.
+            Pratos divididos por periodo com ingredientes detalhados e
+            destaque para a sugestao do chefe com 20% de desconto.
           </p>
 
           <div className="hero__actions">
             <Link
-              className="button button--primary"
+              className="btn btn--primary"
               to={isAuthenticated ? "/pedidos" : "/cadastro"}
             >
-              {isAuthenticated ? "Montar pedido" : "Criar conta"}
+              {isAuthenticated ? "Montar pedido" : "Criar conta para pedir"}
             </Link>
-
-            <Link
-              className="button button--secondary"
-              to={isAuthenticated ? "/reservas" : "/login"}
-            >
-              {isAuthenticated ? "Reservar jantar" : "Entrar na plataforma"}
-            </Link>
-          </div>
-
-          <div className="hero__stats">
-            {dashboardStats.map((stat) => (
-              <article className="stat-card" key={stat.label}>
-                <strong>{stat.value}</strong>
-                <span>{stat.label}</span>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <div className="hero__media panel">
-          <div className="hero__logo-card">
-            <img src="/codefood.png" alt="Logo CodeFood" />
-          </div>
-
-          <div className="hero__spotlight">
-            <div>
-              <span className="kicker">Sugestao do dia</span>
-              <h2>Dois destaques prontos para aparecer no pitch</h2>
-            </div>
-
-            <div className="spotlight-grid">
-              <article className="spotlight-card spotlight-card--amber">
-                <span className="pill pill--highlight">Almoco</span>
-                <strong>{sugestoesAtivas.almoco}</strong>
-                <p>Com desconto automatico de 20% aplicado na experiencia.</p>
-              </article>
-
-              <article className="spotlight-card spotlight-card--red">
-                <span className="pill pill--highlight">Jantar</span>
-                <strong>{sugestoesAtivas.jantar}</strong>
-                <p>Pronto para ganhar destaque na vitrine e no fechamento.</p>
-              </article>
-            </div>
           </div>
         </div>
       </section>
 
-      <section className="card-grid card-grid--three">
-        {serviceModes.map((mode) => (
-          <article className="panel feature-card" key={mode.title}>
-            <span className="kicker">Atendimento</span>
-            <h2>{mode.title}</h2>
-            <p>{mode.text}</p>
+      <section className="panel panel--section" style={{ marginBottom: "2rem" }}>
+        <div className="panel__header">
+          <div>
+            <span className="kicker">Sugestao do Chefe</span>
+            <h2>Destaques do dia com 20% de desconto</h2>
+          </div>
+          <span className="pill">{dashboardStats[0].value} itens</span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+          <article style={{ padding: "1.25rem", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "rgba(176, 140, 62, 0.04)" }}>
+            <span className="pill pill--highlight" style={{ marginBottom: "0.5rem", display: "inline-block" }}>Almoco</span>
+            <strong style={{ display: "block", fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>{sugestoesAtivas.almoco}</strong>
+            <p style={{ fontSize: "0.85rem", color: "var(--cream-muted)", marginTop: "0.25rem" }}>Desconto automatico de 20% aplicado no pedido.</p>
           </article>
-        ))}
+          <article style={{ padding: "1.25rem", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "rgba(139, 38, 53, 0.04)" }}>
+            <span className="pill pill--highlight" style={{ marginBottom: "0.5rem", display: "inline-block" }}>Jantar</span>
+            <strong style={{ display: "block", fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>{sugestoesAtivas.jantar}</strong>
+            <p style={{ fontSize: "0.85rem", color: "var(--cream-muted)", marginTop: "0.25rem" }}>Destaque do chefe para a noite com preco especial.</p>
+          </article>
+        </div>
+      </section>
+    </>
+  );
+
+  // ── Admin content ──
+
+  const adminContent = (
+    <>
+      <section className="hero hero--compact">
+        <div className="hero__content">
+          <span className="kicker">Gestao</span>
+          <h1>Itens do Cardapio</h1>
+          <p className="hero__lead">
+            Adicione, edite e remova pratos. Envie fotos para cada item.
+          </p>
+        </div>
       </section>
 
-      <section className="section-grid section-grid--two">
-        <article className="panel panel--section">
-          <div className="panel__header">
-            <div>
-              <span className="kicker">Regras de negocio</span>
-              <h2>O que a banca espera ver funcionando</h2>
-            </div>
-          </div>
+      {renderAdminForm()}
+    </>
+  );
 
-          <div className="rule-list">
-            {businessRules.map((rule) => (
-              <div className="rule-item" key={rule}>
-                <span className="rule-item__index" />
-                <p>{rule}</p>
-              </div>
-            ))}
-          </div>
-        </article>
+  // ── Shared content (item grids) ──
 
-        <article className="panel panel--section">
-          <div className="panel__header">
-            <div>
-              <span className="kicker">Entrada do usuario</span>
-              <h2>Fluxos principais do trabalho</h2>
-            </div>
-          </div>
-
-          <div className="cta-stack">
-            <Link className="cta-card" to="/cadastro">
-              <strong>Cadastro e login</strong>
-              <p>Onboarding com criacao de conta e primeiro endereco opcional.</p>
-            </Link>
-
-            <Link className="cta-card" to="/pedidos">
-              <strong>Pedidos por periodo</strong>
-              <p>Seleciona itens, atendimento e fecha o pedido na API.</p>
-            </Link>
-
-            <Link className="cta-card" to="/reservas">
-              <strong>Reserva de jantar</strong>
-              <p>Formulario com validacao de horario, mesa e antecedencia.</p>
-            </Link>
-
-            <Link className="cta-card" to="/admin">
-              <strong>Admin e relatorios</strong>
-              <p>Usuarios, sugestao do chefe e indicadores prontos para apresentar.</p>
-            </Link>
-          </div>
-        </article>
-      </section>
-
+  const itemGrids = (
+    <>
       {error ? <div className="message message--error">{error}</div> : null}
 
       {isLoading ? (
         <div className="loading-state panel">
           <span className="route-status__spinner" />
-          <p>Carregando o cardapio conectado ao backend...</p>
+          <p>Carregando o cardapio...</p>
         </div>
       ) : (
         <section className="section-stack">
@@ -338,6 +521,22 @@ const CardapioPage = () => {
           {renderItemGrid("Jantar", itensJantar)}
         </section>
       )}
+    </>
+  );
+
+  if (noShell) {
+    return (
+      <div className="page">
+        {adminContent}
+        {itemGrids}
+      </div>
+    );
+  }
+
+  return (
+    <AppShell contentClassName="page">
+      {clientContent}
+      {itemGrids}
     </AppShell>
   );
 };

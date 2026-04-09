@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(npm run:*)",
+      "Bash(xargs basename:*)",
+      "Bash(ls -la *.json)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(node:*)",
+      "Bash(curl -s -X POST http://localhost:5252/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@restaurante.com\",\"senha\":\"senha123\"}')",
+      "Bash(curl -s http://localhost:5252/api/sugestoes-chef)",
+      "Bash(curl -s http://localhost:5252/api/sugestaochefe)",
+      "Bash(curl -s http://localhost:5252/api/sugestao-chefe)",
+      "Bash(curl -s http://localhost:5252/api/sugestoeschefe)",
+      "Bash(curl -s http://localhost:5252/api/ingredientes -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9lbWFpbGFkZHJlc3MiOiJhZG1pbkByZXN0YXVyYW50ZS5jb20iLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoiQWRtaW4gUmVzdGF1cmFudGUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbmlzdHJhZG9yIiwiZXhwIjoxNzc1ODM5MDAxLCJpc3MiOiJHZXN0YW9SZXN0YXVyYW50ZSIsImF1ZCI6Ikdlc3Rhb1Jlc3RhdXJhbnRlVXNlcnMifQ.ictGte4B6GKbzLJGS7cXwCDyveBM6HAgEi26CjbdvTM')",
+      "Bash(curl -s -X POST http://localhost:5252/api/atendimento/presencial -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9lbWFpbGFkZHJlc3MiOiJhZG1pbkByZXN0YXVyYW50ZS5jb20iLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoiQWRtaW4gUmVzdGF1cmFudGUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbmlzdHJhZG9yIiwiZXhwIjoxNzc1ODM5MDAxLCJpc3MiOiJHZXN0YW9SZXN0YXVyYW50ZSIsImF1ZCI6Ikdlc3Rhb1Jlc3RhdXJhbnRlVXNlcnMifQ.ictGte4B6GKbzLJGS7cXwCDyveBM6HAgEi26CjbdvTM' -H 'Content-Type: application/json' -d '{}')",
+      "Bash(curl -s http://localhost:5173)"
+    ]
+  }
+}

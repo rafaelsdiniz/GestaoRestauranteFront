@@ -36,7 +36,23 @@ const getStoredUser = () => {
   }
 
   try {
-    return JSON.parse(usuarioSalvo) as LoginResponse;
+    const parsed = JSON.parse(usuarioSalvo) as LoginResponse;
+
+    // Garantir que o objeto usuario aninhado exista
+    if (!parsed.usuario && parsed.usuarioId) {
+      parsed.usuario = {
+        id: parsed.usuarioId,
+        nome: parsed.nomeUsuario || "",
+        email: parsed.email || "",
+        tipoUsuario: parsed.tipoUsuario || "Cliente",
+      };
+    }
+
+    if (parsed.tipoUsuario === "Administrador") {
+      parsed.admin = true;
+    }
+
+    return parsed;
   } catch {
     localStorage.removeItem(USER_KEY);
     return null;
@@ -55,6 +71,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     localStorage.setItem(TOKEN_KEY, response.token);
     localStorage.setItem(USER_KEY, JSON.stringify(response));
+
+    return response;
   }, []);
 
   const logout = useCallback(() => {
@@ -65,16 +83,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem(USER_KEY);
   }, []);
 
+  const isAdmin = useMemo(() => {
+    if (!usuario) return false;
+    if (usuario.admin === true) return true;
+    if (usuario.tipoUsuario === "Administrador") return true;
+    if (usuario.usuario?.tipoUsuario === "Administrador") return true;
+    return false;
+  }, [usuario]);
+
   const value = useMemo(
     () => ({
       token,
       usuario,
       isAuthenticated: !!token,
+      isAdmin,
       isReady: true,
       login,
       logout,
     }),
-    [login, logout, token, usuario]
+    [isAdmin, login, logout, token, usuario]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

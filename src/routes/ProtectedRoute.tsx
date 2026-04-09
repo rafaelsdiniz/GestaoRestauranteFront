@@ -1,16 +1,12 @@
 import { Navigate, Outlet } from "react-router-dom";
+import Loader from "../components/Loader";
 import { useAuth } from "../contexts/useAuth";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isReady } = useAuth();
 
   if (!isReady) {
-    return (
-      <div className="route-status">
-        <span className="route-status__spinner" />
-        <p>Recuperando sua sessao...</p>
-      </div>
-    );
+    return <Loader />;
   }
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;

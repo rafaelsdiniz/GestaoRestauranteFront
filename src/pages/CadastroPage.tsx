@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
+import { cadastrar } from "../services/AuthService";
 import { criarEndereco } from "../services/EnderecoService";
-import { criarUsuario } from "../services/UsuarioService";
 import type { EnderecoRequestDTO } from "../types/dto/endereco/EnderecoRequestDTO";
 import { getErrorMessage } from "../utils/error";
 
@@ -86,7 +86,7 @@ const CadastroPage = () => {
     setIsSubmitting(true);
 
     try {
-      const usuario = await criarUsuario({ nome, email, senha });
+      const usuario = await cadastrar({ nome, email, senha });
 
       if (cadastrarEnderecoInicial) {
         await criarEndereco(usuario.id, endereco);
@@ -113,21 +113,21 @@ const CadastroPage = () => {
     <AppShell contentClassName="page page--auth">
       <section className="auth-layout auth-layout--wide">
         <article className="panel auth-panel auth-panel--highlight">
-          <span className="kicker">Cadastro do cliente</span>
-          <h1>Onboarding pronto para mostrar usuario e enderecos no mesmo fluxo.</h1>
+          <span className="kicker">Crie sua conta</span>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600, lineHeight: 1.2 }}>Cadastre-se para fazer pedidos e reservar mesas.</h1>
           <p className="hero__lead">
-            O formulario cria a conta e ainda pode registrar o primeiro endereco
-            de entrega, alinhando o front com o requisito de multiplos enderecos.
+            Crie sua conta e ja cadastre um endereco de entrega.
+            Voce tera acesso a pedidos, reservas e historico completo.
           </p>
 
           <div className="hero__stats">
             <article className="stat-card">
-              <strong>1 conta</strong>
-              <span>base para pedidos, reservas e historico</span>
+              <strong>Pedidos</strong>
+              <span>monte com periodo e atendimento</span>
             </article>
             <article className="stat-card">
-              <strong>N enderecos</strong>
-              <span>fluxo preparado para delivery proprio e parceiros</span>
+              <strong>Reservas</strong>
+              <span>agende mesas para o jantar</span>
             </article>
           </div>
         </article>
@@ -156,7 +156,7 @@ const CadastroPage = () => {
               <span>Email</span>
               <input
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="voce@codefood.com"
+                placeholder="voce@bravo.com"
                 required
                 type="email"
                 value={email}

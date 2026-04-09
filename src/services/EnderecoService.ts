@@ -2,27 +2,46 @@ import api from "./api";
 import type { Endereco } from "../types/Endereco";
 import type { EnderecoRequestDTO } from "../types/dto/endereco/EnderecoRequestDTO";
 
-export const criarEndereco = async (usuarioId: number, dto: EnderecoRequestDTO) => {
-  const { data } = await api.post<Endereco>(`/enderecos/${usuarioId}`, dto);
+// Listar todos os endereços do usuário
+export const listarEnderecosDoUsuario = async (
+  usuarioId: number
+): Promise<Endereco[]> => {
+  const { data } = await api.get<Endereco[]>(`/usuarios/${usuarioId}/enderecos`);
   return data;
 };
 
-export const listarEnderecos = async (usuarioId: number) => {
-  const { data } = await api.get<Endereco[]>(`/enderecos/usuario/${usuarioId}`);
+// Buscar endereço por id
+export const buscarEnderecoPorId = async (
+  usuarioId: number,
+  id: number
+): Promise<Endereco> => {
+  const { data } = await api.get<Endereco>(`/usuarios/${usuarioId}/enderecos/${id}`);
   return data;
 };
 
-export const buscarEnderecoPorId = async (id: number) => {
-  const { data } = await api.get<Endereco>(`/enderecos/${id}`);
+// Criar endereço
+export const criarEndereco = async (
+  usuarioId: number,
+  dto: EnderecoRequestDTO
+): Promise<Endereco> => {
+  const { data } = await api.post<Endereco>(`/usuarios/${usuarioId}/enderecos`, dto);
   return data;
 };
 
-export const atualizarEndereco = async (id: number, dto: EnderecoRequestDTO) => {
-  const { data } = await api.put<Endereco>(`/enderecos/${id}`, dto);
+// Atualizar endereço
+export const atualizarEndereco = async (
+  usuarioId: number,
+  id: number,
+  dto: EnderecoRequestDTO
+): Promise<Endereco> => {
+  const { data } = await api.put<Endereco>(`/usuarios/${usuarioId}/enderecos/${id}`, dto);
   return data;
 };
 
-export const deletarEndereco = async (id: number) => {
-  const { data } = await api.delete<boolean>(`/enderecos/${id}`);
-  return data;
+// Deletar endereço
+export const deletarEndereco = async (
+  usuarioId: number,
+  id: number
+): Promise<void> => {
+  await api.delete(`/usuarios/${usuarioId}/enderecos/${id}`);
 };

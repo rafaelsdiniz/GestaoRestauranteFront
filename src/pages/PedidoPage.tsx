@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
-import { criarAtendimento } from "../services/AtendimentoService";
-import { criarEndereco, listarEnderecos } from "../services/EnderecoService";
+import {
+  criarAtendimentoPresencial,
+  criarAtendimentoDeliveryProprio,
+  criarAtendimentoDeliveryAplicativo,
+} from "../services/AtendimentoService";
+import { criarEndereco, listarEnderecosDoUsuario } from "../services/EnderecoService";
 import { listarItensCardapio } from "../services/ItemCardapioService";
-import { criarPedido, listarPedidos } from "../services/PedidoService";
+import { criarPedido, listarPedidosDoUsuario } from "../services/PedidoService";
 import type { Endereco } from "../types/Endereco";
 import type { ItemCardapio } from "../types/ItemCardapio";
 import type { Pedido } from "../types/Pedido";
@@ -91,8 +95,8 @@ const PedidoPage = () => {
 
       const [itensResult, pedidosResult, enderecosResult] = await Promise.allSettled([
         listarItensCardapio(),
-        listarPedidos(),
-        listarEnderecos(usuario.usuarioId),
+        listarPedidosDoUsuario(usuario?.usuario?.id),
+        listarEnderecosDoUsuario(usuario?.usuario?.id),
       ]);
 
       if (!isMounted) {
@@ -229,7 +233,7 @@ const PedidoPage = () => {
     setIsSavingAddress(true);
 
     try {
-      const createdAddress = await criarEndereco(usuario.usuarioId, novoEndereco);
+      const createdAddress = await criarEndereco(usuario?.usuario?.id, novoEndereco);
 
       setEnderecos((previous) => [...previous, createdAddress]);
       setEnderecoSelecionadoId(createdAddress.id);
@@ -279,16 +283,22 @@ const PedidoPage = () => {
         ? `Entregar em ${formatAddress(enderecoSelecionado)}. ${observacaoEntrega}`.trim()
         : observacaoEntrega || undefined;
 
-      const atendimento = await criarAtendimento({
-        tipoAtendimento,
-        observacaoEntrega: observacao,
-        nomeAplicativo:
-          tipoAtendimento === TipoAgendamento.DeliveryAplicativo
-            ? nomeAplicativo
-            : undefined,
-      });
+      let atendimento;
+      switch (tipoAtendimento) {
+        case TipoAgendamento.AtendimentoPresencial:
+          atendimento = await criarAtendimentoPresencial(observacao);
+          break;
+        case TipoAgendamento.DeliveryProprio:
+          atendimento = await criarAtendimentoDeliveryProprio(observacao);
+          break;
+        case TipoAgendamento.DeliveryAplicativo:
+          atendimento = await criarAtendimentoDeliveryAplicativo(nomeAplicativo, observacao);
+          break;
+        default:
+          throw new Error("Tipo de atendimento inválido.");
+      }
 
-      const novoPedido = await criarPedido(usuario.usuarioId, {
+      const novoPedido = await criarPedido(usuario?.usuario?.id, {
         atendimentoId: atendimento.id,
         itensIds: itensSelecionados,
         periodo,
@@ -314,11 +324,11 @@ const PedidoPage = () => {
     <AppShell contentClassName="page">
       <section className="hero hero--compact">
         <div className="hero__content">
-          <span className="kicker">Modulo de pedidos</span>
-          <h1>Monte um pedido com periodo, atendimento e resumo financeiro.</h1>
+          <span className="kicker">Pedidos</span>
+          <h1>Monte seu pedido</h1>
           <p className="hero__lead">
-            O fluxo respeita almoco e jantar, integra atendimento ao backend e
-            exibe o historico do usuario para ficar convincente na apresentacao.
+            Escolha o periodo, tipo de atendimento e selecione os itens do
+            cardapio. O resumo financeiro atualiza em tempo real.
           </p>
         </div>
       </section>

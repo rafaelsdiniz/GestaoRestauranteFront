@@ -2,33 +2,49 @@ import api from "./api";
 import type { ItemCardapio } from "../types/ItemCardapio";
 import type { ItemCardapioRequestDTO } from "../types/dto/item-cardapio/ItemCardapioRequestDTO";
 
-export const listarItensCardapio = async () => {
+// =========================
+// LISTAR
+// =========================
+export const listarItensCardapio = async (): Promise<ItemCardapio[]> => {
   const { data } = await api.get<ItemCardapio[]>("/itemcardapio");
   return data;
 };
 
-export const buscarItemPorId = async (id: number) => {
+// =========================
+// BUSCAR POR ID
+// =========================
+export const buscarItemPorId = async (id: number): Promise<ItemCardapio> => {
   const { data } = await api.get<ItemCardapio>(`/itemcardapio/${id}`);
   return data;
 };
 
-export const criarItemCardapio = async (dto: ItemCardapioRequestDTO) => {
+// =========================
+// CRIAR
+// =========================
+export const criarItemCardapio = async (
+  dto: ItemCardapioRequestDTO
+): Promise<ItemCardapio> => {
   const { data } = await api.post<ItemCardapio>("/itemcardapio", dto);
   return data;
 };
 
+// =========================
+// ATUALIZAR
+// =========================
 export const atualizarItemCardapio = async (
   id: number,
   dto: ItemCardapioRequestDTO
-) => {
+): Promise<ItemCardapio> => {
   const { data } = await api.put<ItemCardapio>(
-    `/itens-cardapio/${id}`,
+    `/itemcardapio/${id}`,
     dto
   );
   return data;
 };
 
-export const deletarItemCardapio = async (id: number) => {
-  const { data } = await api.delete<boolean>(`/itemcardapio/${id}`);
-  return data;
+// =========================
+// DELETAR
+// =========================
+export const deletarItemCardapio = async (id: number): Promise<void> => {
+  await api.delete(`/itemcardapio/${id}`);
 };

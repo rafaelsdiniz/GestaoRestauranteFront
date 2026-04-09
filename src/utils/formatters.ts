@@ -161,3 +161,17 @@ export const isSameDate = (left?: string, right?: string) => {
 
   return left.slice(0, 10) === right.slice(0, 10);
 };
+
+// Funções adicionais conforme GuiaFront.md
+export const formatarPreco = (valor: number): string =>
+  valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+export const formatarData = (iso: string): string =>
+  new Date(iso).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
+
+// Alias para compatibilidade
+export const formatPrice = formatarPreco;
+export const formatDateFull = formatarData;

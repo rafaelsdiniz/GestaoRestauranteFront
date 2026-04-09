@@ -2,26 +2,46 @@ import api from "./api";
 import type { Usuario } from "../types/Usuario";
 import type { UsuarioRequestDTO } from "../types/dto/usuario/UsuarioRequestDTO";
 
-export const criarUsuario = async (dto: UsuarioRequestDTO) => {
-  const { data } = await api.post<Usuario>("/usuarios", dto);
+// =========================
+// CRIAR
+// =========================
+export const criarUsuario = async (
+  dto: UsuarioRequestDTO
+): Promise<Usuario> => {
+  const { data } = await api.post<Usuario>("/usuario", dto);
   return data;
 };
 
-export const listarUsuarios = async () => {
-  const { data } = await api.get<Usuario[]>("/usuarios");
+// =========================
+// LISTAR
+// =========================
+export const listarUsuarios = async (): Promise<Usuario[]> => {
+  const { data } = await api.get<Usuario[]>("/usuario");
   return data;
 };
 
-export const buscarUsuarioPorId = async (id: number) => {
-  const { data } = await api.get<Usuario>(`/usuarios/${id}`);
+// =========================
+// BUSCAR POR ID
+// =========================
+export const buscarUsuarioPorId = async (id: number): Promise<Usuario> => {
+  const { data } = await api.get<Usuario>(`/usuario/${id}`);
   return data;
 };
 
-export const atualizarUsuario = async (id: number, dto: UsuarioRequestDTO) => {
-  const { data } = await api.put<Usuario>(`/usuarios/${id}`, dto);
+// =========================
+// ATUALIZAR
+// =========================
+export const atualizarUsuario = async (
+  id: number,
+  dto: UsuarioRequestDTO
+): Promise<Usuario> => {
+  const { data } = await api.put<Usuario>(`/usuario/${id}`, dto);
   return data;
 };
 
-export const deletarUsuario = async (id: number) => {
-  await api.delete(`/usuarios/${id}`);
+// =========================
+// DELETAR
+// =========================
+export const deletarUsuario = async (id: number): Promise<void> => {
+  await api.delete(`/usuario/${id}`);
 };
