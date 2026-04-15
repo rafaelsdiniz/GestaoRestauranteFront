@@ -66,6 +66,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const login = useCallback(async (dto: LoginRequestDTO) => {
     const response = await loginRequest(dto);
 
+    if (!response.usuario && response.usuarioId) {
+      response.usuario = {
+        id: response.usuarioId,
+        nome: response.nomeUsuario || "",
+        email: response.email || "",
+        tipoUsuario: response.tipoUsuario || "Cliente",
+      };
+    }
+
+    if (response.tipoUsuario === "Administrador") {
+      response.admin = true;
+    }
+
     setToken(response.token);
     setUsuario(response);
 
@@ -81,6 +94,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+  }, []);
+
+  const updateUsuario = useCallback((partial: Partial<LoginResponse>) => {
+    setUsuario((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...partial };
+      if (partial.nomeUsuario && updated.usuario) {
+        updated.usuario = { ...updated.usuario, nome: partial.nomeUsuario };
+      }
+      if (partial.email && updated.usuario) {
+        updated.usuario = { ...updated.usuario, email: partial.email };
+      }
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const isAdmin = useMemo(() => {
@@ -100,8 +128,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       isReady: true,
       login,
       logout,
+      updateUsuario,
     }),
-    [isAdmin, login, logout, token, usuario]
+    [isAdmin, login, logout, updateUsuario, token, usuario]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

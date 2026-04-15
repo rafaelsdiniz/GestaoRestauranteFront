@@ -12,6 +12,7 @@ export interface Pedido extends BaseEntity {
 
   nomeUsuario: string;
   tipoAtendimento: string;
+  status?: string;
 
-  itens: string[];
+  itens: Array<string | { nomeItem: string; quantidade: number; precoUnitario: number; subtotal: number }>;
 }

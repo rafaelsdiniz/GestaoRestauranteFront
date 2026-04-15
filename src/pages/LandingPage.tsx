@@ -133,7 +133,7 @@ const LandingPage = () => {
             <div className="landing-card__content">
               <h3>Delivery e Reservas</h3>
               <p>
-                Peca para entrega ou reserve sua mesa para o jantar entre 19h e 22h.
+                Peca para entrega ou reserve sua mesa para o almoco entre 11h e 14h.
               </p>
             </div>
           </Link>
@@ -157,8 +157,8 @@ const LandingPage = () => {
               <span className="stat-item__label">Tipos de atendimento</span>
             </div>
             <div className="stat-item">
-              <span className="stat-item__value">19h-22h</span>
-              <span className="stat-item__label">Reservas de jantar</span>
+              <span className="stat-item__value">11h-14h</span>
+              <span className="stat-item__label">Reservas de almoco</span>
             </div>
           </div>
         </div>
@@ -267,7 +267,7 @@ const LandingPage = () => {
               <div className="cta-card-landing__icon">&#128197;</div>
               <div>
                 <h3>Reservar Mesa</h3>
-                <p>Agende para o jantar entre 19h e 22h com antecedencia.</p>
+                <p>Agende para o almoco entre 11h e 14h com antecedencia.</p>
               </div>
               <span className="cta-card-landing__arrow">&rarr;</span>
             </Link>

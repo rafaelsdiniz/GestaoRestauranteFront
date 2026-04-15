@@ -23,6 +23,7 @@ const emptyAddress: EnderecoRequestDTO = {
 
 const EnderecoPage = () => {
   const { usuario } = useAuth();
+  const usuarioId = usuario?.usuario?.id ?? usuario?.usuarioId;
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,10 +40,10 @@ const EnderecoPage = () => {
       setError("");
 
       try {
-        if (!usuario?.usuario?.id) {
+        if (!usuarioId) {
           throw new Error("Usuário não autenticado.");
         }
-        const data = await listarEnderecosDoUsuario(usuario.usuario.id);
+        const data = await listarEnderecosDoUsuario(usuarioId);
         if (isMounted) {
           setEnderecos(data);
         }
@@ -67,7 +68,7 @@ const EnderecoPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [usuario?.usuario?.id]);
+  }, [usuarioId]);
 
   const handleInputChange = <T extends keyof EnderecoRequestDTO>(
     field: T,
@@ -99,7 +100,7 @@ const EnderecoPage = () => {
     setError("");
     setSuccess("");
 
-    if (!usuario?.usuario?.id) {
+    if (!usuarioId) {
       setError("Usuário não autenticado.");
       return;
     }
@@ -108,7 +109,7 @@ const EnderecoPage = () => {
 
     try {
       if (editingId) {
-        await atualizarEndereco(usuario.usuario.id, editingId, formData);
+        await atualizarEndereco(usuarioId, editingId, formData);
         setEnderecos((prev) =>
           prev.map((end) =>
             end.id === editingId ? { ...end, ...formData } : end
@@ -116,7 +117,7 @@ const EnderecoPage = () => {
         );
         setSuccess("Endereço atualizado com sucesso.");
       } else {
-        const novoEndereco = await criarEndereco(usuario.usuario.id, formData);
+        const novoEndereco = await criarEndereco(usuarioId, formData);
         setEnderecos((prev) => [...prev, novoEndereco]);
         setSuccess("Endereço criado com sucesso.");
       }
@@ -142,7 +143,7 @@ const EnderecoPage = () => {
       return;
     }
 
-    if (!usuario?.usuario?.id) {
+    if (!usuarioId) {
       setError("Usuário não autenticado.");
       return;
     }
@@ -151,7 +152,7 @@ const EnderecoPage = () => {
     setSuccess("");
 
     try {
-      await deletarEndereco(usuario.usuario.id, id);
+      await deletarEndereco(usuarioId, id);
       setEnderecos((prev) => prev.filter((end) => end.id !== id));
       setSuccess("Endereço excluído com sucesso.");
 

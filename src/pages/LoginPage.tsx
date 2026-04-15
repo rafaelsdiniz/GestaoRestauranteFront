@@ -6,7 +6,7 @@ import { getErrorMessage } from "../utils/error";
 
 const loginBenefits = [
   "Acesso rapido ao fluxo de pedidos por periodo.",
-  "Reserva de jantar com validacao de horario e mesa.",
+  "Reserva de almoco com validacao de horario e mesa.",
   "Painel administrativo com relatorios e sugestao do chefe.",
 ];
 
@@ -19,7 +19,7 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isReady && isAuthenticated) {
-    return <Navigate replace to={isAdmin ? "/admin" : "/pedidos"} />;
+    return <Navigate replace to={isAdmin ? "/admin" : "/"} />;
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -30,7 +30,7 @@ const LoginPage = () => {
     try {
       const response = await login({ email, senha });
       const userIsAdmin = response.admin === true || response.tipoUsuario === "Administrador";
-      navigate(userIsAdmin ? "/admin" : "/pedidos", { replace: true });
+      navigate(userIsAdmin ? "/admin" : "/", { replace: true });
     } catch (error) {
       setErro(
         getErrorMessage(

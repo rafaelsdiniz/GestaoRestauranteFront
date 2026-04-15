@@ -33,56 +33,26 @@ const AppShell = ({ children, contentClassName }: AppShellProps) => {
           </NavLink>
           <NavLink
             className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-            to="/pedidos"
-          >
-            Pedidos
-          </NavLink>
-          <NavLink
-            className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
             to="/reservas"
           >
             Reservas
           </NavLink>
-          <NavLink
-            className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-            to="/enderecos"
-          >
-            Endereços
-          </NavLink>
-          <NavLink
-            className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-            to="/sugestoes-chef"
-          >
-            Sugestão Chef
-          </NavLink>
           {isAdmin && (
-            <>
-              <NavLink
-                className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-                to="/admin"
-              >
-                Admin
-              </NavLink>
-              <NavLink
-                className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-                to="/ingredientes"
-              >
-                Ingredientes
-              </NavLink>
-              <NavLink
-                className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
-                to="/mesas"
-              >
-                Mesas
-              </NavLink>
-            </>
+            <NavLink
+              className={({ isActive }) => `app-shell__nav-link${isActive ? " is-active" : ""}`}
+              to="/admin"
+            >
+              Admin
+            </NavLink>
           )}
         </nav>
 
         <div className="app-shell__actions">
           {isAuthenticated ? (
             <>
-              <span className="app-shell__username">{usuario?.nomeUsuario ?? "Cliente"}</span>
+              <Link className="btn btn--outline-gold btn--sm" to="/perfil">
+                Meu Perfil
+              </Link>
               <button className="btn btn--ghost btn--sm" onClick={logout} type="button">
                 Sair
               </button>

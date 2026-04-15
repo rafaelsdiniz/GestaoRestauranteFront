@@ -10,6 +10,7 @@ export interface AuthContextType {
   isReady: boolean;
   login: (dto: LoginRequestDTO) => Promise<LoginResponse>;
   logout: () => void;
+  updateUsuario: (partial: Partial<LoginResponse>) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);

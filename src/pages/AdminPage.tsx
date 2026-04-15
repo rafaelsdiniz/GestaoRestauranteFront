@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
 import {
+  BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
+import {
   getDashboardStats,
   listarUsuariosComEstatisticas,
   getUltimosPedidos,
@@ -23,6 +27,28 @@ import type { SugestaoChefe } from "../types/SugestaoChefe";
 import { Periodo } from "../types/enums/Periodo";
 import { getErrorMessage } from "../utils/error";
 import { formatDate, formatDateTime, getPeriodoLabel, toDateInputValue, formatarPreco } from "../utils/formatters";
+
+const transicoesPedido: Record<string, string[]> = {
+  Recebido: ["EmPreparo", "Cancelado"],
+  EmPreparo: ["Pronto", "Cancelado"],
+  Pronto: ["Entregue", "Cancelado"],
+  Entregue: [],
+  Cancelado: [],
+};
+
+const transicoesReserva: Record<string, string[]> = {
+  Ativa: ["Confirmada", "Cancelada"],
+  Confirmada: ["Finalizada", "Cancelada"],
+  Cancelada: [],
+  Finalizada: [],
+};
+
+const labelStatusPedido: Record<string, string> = {
+  EmPreparo: "Em Preparo",
+  Pronto: "Pronto",
+  Entregue: "Entregue",
+  Cancelado: "Cancelado",
+};
 
 type AdminSection = "dashboard" | "pedidos" | "reservas" | "clientes" | "relatorios" | "sugestoes";
 
@@ -169,24 +195,65 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
     sugestoes: "Sugestao do Chef",
   };
 
+  const CHART_COLORS = ["#B08C3E", "#C9A652", "#8A6C2A", "#8b2635", "#3D8C5C", "#5BA3D9", "#D4A853"];
+
+  const chartTooltipStyle = {
+    contentStyle: {
+      background: "#FFFFFF",
+      border: "1px solid rgba(160,140,100,0.18)",
+      borderRadius: "8px",
+      fontSize: "0.82rem",
+      boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
+    },
+    labelStyle: { fontWeight: 600, color: "#2A2520" },
+  };
+
   const renderDashboard = () => {
     if (!dashboardStats) return null;
+
     const kpis = [
-      { label: "Usuarios", value: dashboardStats.totalUsuarios, sub: `${dashboardStats.totalAdministradores} admins` },
+      { label: "Faturamento Total", value: formatarPreco(dashboardStats.faturamentoTotal), sub: `${formatarPreco(dashboardStats.faturamentoMes)} no mes`, highlight: true },
       { label: "Pedidos", value: dashboardStats.totalPedidos, sub: `${dashboardStats.pedidosHoje} hoje` },
       { label: "Reservas", value: dashboardStats.totalReservas, sub: `${dashboardStats.reservasHoje} hoje` },
-      { label: "Faturamento", value: formatarPreco(dashboardStats.faturamentoTotal), sub: `${formatarPreco(dashboardStats.faturamentoMes)} no mes` },
-      { label: "Atendimentos", value: dashboardStats.totalAtendimentos, sub: `${dashboardStats.atendimentosPresencial} presenciais` },
-      { label: "Delivery Proprio", value: dashboardStats.atendimentosDelivery, sub: "entregas proprias" },
-      { label: "Delivery App", value: dashboardStats.atendimentosApp, sub: "via aplicativo" },
-      { label: "Cardapio", value: dashboardStats.totalItensCardapio, sub: `${dashboardStats.itensAlmoco} almoco / ${dashboardStats.itensJantar} jantar` },
+      { label: "Usuarios", value: dashboardStats.totalUsuarios, sub: `${dashboardStats.totalAdministradores} admins` },
     ];
+
+    const atendimentoData = [
+      { name: "Presencial", valor: dashboardStats.atendimentosPresencial },
+      { name: "Delivery", valor: dashboardStats.atendimentosDelivery },
+      { name: "App", valor: dashboardStats.atendimentosApp },
+    ];
+
+    const cardapioData = [
+      { name: "Almoco", valor: dashboardStats.itensAlmoco },
+      { name: "Jantar", valor: dashboardStats.itensJantar },
+    ];
+
+    const faturamentoChartData = faturamento.map(f => ({
+      name: f.tipoAtendimento,
+      faturamento: f.totalFaturado,
+      pedidos: f.quantidadePedidos,
+    }));
+
+    const topItensData = itensVendidos.slice(0, 6).map(item => ({
+      name: item.nomeItem.length > 18 ? `${item.nomeItem.slice(0, 18)}...` : item.nomeItem,
+      vendidos: item.quantidadeVendida,
+      faturamento: item.totalGerado,
+    }));
+
+    const statusPedidos: Record<string, number> = {};
+    todosPedidos.forEach(p => {
+      const s = p.status || "Pendente";
+      statusPedidos[s] = (statusPedidos[s] || 0) + 1;
+    });
+    const statusPedidoData = Object.entries(statusPedidos).map(([name, value]) => ({ name, value }));
 
     return (
       <>
+        {/* KPI Cards */}
         <div className="admin-stats">
           {kpis.map(kpi => (
-            <div className="admin-stat" key={kpi.label}>
+            <div className={`admin-stat${kpi.highlight ? " admin-stat--highlight" : ""}`} key={kpi.label}>
               <span className="admin-stat__value">{kpi.value}</span>
               <span className="admin-stat__label">{kpi.label}</span>
               <span className="admin-stat__sub">{kpi.sub}</span>
@@ -194,6 +261,184 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
           ))}
         </div>
 
+        {/* Charts row: Faturamento por tipo + Atendimentos pizza */}
+        <div className="admin-grid">
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Financeiro</span>
+                <h3 className="card__title">Faturamento por tipo de atendimento</h3>
+              </div>
+            </div>
+            {faturamentoChartData.length === 0 ? (
+              <div className="empty">Sem dados de faturamento.</div>
+            ) : (
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={faturamentoChartData} barCategoryGap="25%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#857B70" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#857B70" }} axisLine={false} tickLine={false}
+                      tickFormatter={v => `R$${(v / 100).toFixed(0)}`} />
+                    <Tooltip {...chartTooltipStyle} formatter={(v: number) => formatarPreco(v)} />
+                    <Bar dataKey="faturamento" name="Faturamento" radius={[6, 6, 0, 0]}>
+                      {faturamentoChartData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Atendimentos</span>
+                <h3 className="card__title">Distribuicao por canal</h3>
+              </div>
+              <span className="admin-stat__sub" style={{ textAlign: "right" }}>
+                {dashboardStats.totalAtendimentos} total
+              </span>
+            </div>
+            {dashboardStats.totalAtendimentos === 0 ? (
+              <div className="empty">Sem atendimentos registrados.</div>
+            ) : (
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={atendimentoData} dataKey="valor" nameKey="name" cx="50%" cy="50%"
+                      innerRadius={60} outerRadius={100} paddingAngle={4} stroke="none"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {atendimentoData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip {...chartTooltipStyle} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: "0.82rem" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Charts row: Top itens vendidos + Status dos pedidos */}
+        <div className="admin-grid">
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Ranking</span>
+                <h3 className="card__title">Itens mais vendidos</h3>
+              </div>
+              <NavLink className="btn btn--ghost btn--sm" to="/admin/relatorios">Ver relatorio</NavLink>
+            </div>
+            {topItensData.length === 0 ? (
+              <div className="empty">Sem dados de vendas.</div>
+            ) : (
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={topItensData} layout="vertical" barCategoryGap="20%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: "#857B70" }} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11, fill: "#857B70" }} axisLine={false} tickLine={false} />
+                    <Tooltip {...chartTooltipStyle} />
+                    <Bar dataKey="vendidos" name="Vendidos" fill="#B08C3E" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Status</span>
+                <h3 className="card__title">Pedidos por status</h3>
+              </div>
+              <NavLink className="btn btn--ghost btn--sm" to="/admin/pedidos">Ver pedidos</NavLink>
+            </div>
+            {statusPedidoData.length === 0 ? (
+              <div className="empty">Nenhum pedido registrado.</div>
+            ) : (
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={statusPedidoData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      outerRadius={100} paddingAngle={3} stroke="none"
+                      label={({ name, value }) => `${labelStatusPedido[name] || name}: ${value}`}
+                    >
+                      {statusPedidoData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip {...chartTooltipStyle} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: "0.82rem" }}
+                      formatter={(value: string) => labelStatusPedido[value] || value} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cardapio split + Pedidos recentes + Reservas */}
+        <div className="admin-grid">
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Cardapio</span>
+                <h3 className="card__title">Itens por periodo</h3>
+              </div>
+              <span className="admin-stat__sub">{dashboardStats.totalItensCardapio} itens</span>
+            </div>
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={cardapioData} barCategoryGap="35%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#857B70" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#857B70" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip {...chartTooltipStyle} />
+                  <Bar dataKey="valor" name="Itens" radius={[6, 6, 0, 0]}>
+                    <Cell fill="#B08C3E" />
+                    <Cell fill="#8b2635" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <span className="card__label">Acesso rapido</span>
+                <h3 className="card__title">Gestao do restaurante</h3>
+              </div>
+            </div>
+            <div className="admin-quick-links">
+              <NavLink className="admin-quick-link" to="/admin/ingredientes">
+                <strong>Ingredientes</strong>
+                <span>Gerenciar ingredientes do cardapio</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/mesas">
+                <strong>Mesas</strong>
+                <span>Gerenciar mesas do restaurante</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/sugestoes">
+                <strong>Sugestoes do Chef</strong>
+                <span>Ver todas as sugestoes cadastradas</span>
+              </NavLink>
+              <NavLink className="admin-quick-link" to="/admin/cardapio">
+                <strong>Cardapio</strong>
+                <span>Visualizar cardapio publico</span>
+              </NavLink>
+            </div>
+          </div>
+        </div>
+
+        {/* Pedidos recentes + Reservas proximas */}
         <div className="admin-grid">
           <div className="card">
             <div className="card__header">
@@ -259,59 +504,6 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
             )}
           </div>
         </div>
-
-        <div className="admin-grid">
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <span className="card__label">Acesso rapido</span>
-                <h3 className="card__title">Gestao do restaurante</h3>
-              </div>
-            </div>
-            <div className="admin-quick-links">
-              <NavLink className="admin-quick-link" to="/admin/ingredientes">
-                <strong>Ingredientes</strong>
-                <span>Gerenciar ingredientes do cardapio</span>
-              </NavLink>
-              <NavLink className="admin-quick-link" to="/admin/mesas">
-                <strong>Mesas</strong>
-                <span>Gerenciar mesas do restaurante</span>
-              </NavLink>
-              <NavLink className="admin-quick-link" to="/admin/sugestoes">
-                <strong>Sugestoes do Chef</strong>
-                <span>Ver todas as sugestoes cadastradas</span>
-              </NavLink>
-              <NavLink className="admin-quick-link" to="/admin/cardapio">
-                <strong>Cardapio</strong>
-                <span>Visualizar cardapio publico</span>
-              </NavLink>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <span className="card__label">Resumo financeiro</span>
-                <h3 className="card__title">Faturamento por tipo</h3>
-              </div>
-            </div>
-            {faturamento.length === 0 ? (
-              <div className="empty">Sem dados de faturamento.</div>
-            ) : (
-              <div className="admin-list">
-                {faturamento.map((item, i) => (
-                  <div key={i} className="admin-list__item">
-                    <div>
-                      <strong>{item.tipoAtendimento}</strong>
-                      <span className="admin-list__meta">{item.quantidadePedidos} pedidos</span>
-                    </div>
-                    <span className="admin-list__value">{formatarPreco(item.totalFaturado)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </>
     );
   };
@@ -359,21 +551,22 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
                     </span>
                   </td>
                   <td>
-                    <select
-                      className="admin-table__select"
-                      value=""
-                      onChange={e => {
-                        if (e.target.value) void handleChangeOrderStatus(pedido.id, e.target.value);
-                      }}
-                    >
-                      <option value="">Alterar...</option>
-                      <option value="Pendente">Pendente</option>
-                      <option value="EmPreparo">Em Preparo</option>
-                      <option value="Pronto">Pronto</option>
-                      <option value="Entregue">Entregue</option>
-                      <option value="Concluido">Concluido</option>
-                      <option value="Cancelado">Cancelado</option>
-                    </select>
+                    {(transicoesPedido[pedido.status] ?? []).length > 0 ? (
+                      <select
+                        className="admin-table__select"
+                        value=""
+                        onChange={e => {
+                          if (e.target.value) void handleChangeOrderStatus(pedido.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Alterar...</option>
+                        {(transicoesPedido[pedido.status] ?? []).map(s => (
+                          <option key={s} value={s}>{labelStatusPedido[s] || s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: "0.78rem", opacity: 0.5 }}>Final</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -427,19 +620,22 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
                     </span>
                   </td>
                   <td>
-                    <select
-                      className="admin-table__select"
-                      value=""
-                      onChange={e => {
-                        if (e.target.value) void handleChangeReservationStatus(reserva.id, e.target.value);
-                      }}
-                    >
-                      <option value="">Alterar...</option>
-                      <option value="Ativa">Ativa</option>
-                      <option value="Confirmada">Confirmada</option>
-                      <option value="Finalizada">Finalizada</option>
-                      <option value="Cancelada">Cancelada</option>
-                    </select>
+                    {(transicoesReserva[reserva.statusReserva] ?? []).length > 0 ? (
+                      <select
+                        className="admin-table__select"
+                        value=""
+                        onChange={e => {
+                          if (e.target.value) void handleChangeReservationStatus(reserva.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Alterar...</option>
+                        {(transicoesReserva[reserva.statusReserva] ?? []).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: "0.78rem", opacity: 0.5 }}>Final</span>
+                    )}
                   </td>
                 </tr>
               ))}

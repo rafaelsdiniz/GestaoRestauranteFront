@@ -13,11 +13,21 @@ export const getErrorMessage = (
 
     if (
       responseData &&
-      typeof responseData === "object" &&
-      "message" in responseData &&
-      typeof responseData.message === "string"
+      typeof responseData === "object"
     ) {
-      return responseData.message;
+      if (
+        "mensagem" in responseData &&
+        typeof responseData.mensagem === "string"
+      ) {
+        return responseData.mensagem;
+      }
+
+      if (
+        "message" in responseData &&
+        typeof responseData.message === "string"
+      ) {
+        return responseData.message;
+      }
     }
 
     if (error.message) {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
 import {
@@ -8,10 +9,9 @@ import {
 } from "../services/AtendimentoService";
 import { criarEndereco, listarEnderecosDoUsuario } from "../services/EnderecoService";
 import { listarItensCardapio } from "../services/ItemCardapioService";
-import { criarPedido, listarPedidosDoUsuario } from "../services/PedidoService";
+import { criarPedido } from "../services/PedidoService";
 import type { Endereco } from "../types/Endereco";
 import type { ItemCardapio } from "../types/ItemCardapio";
-import type { Pedido } from "../types/Pedido";
 import type { EnderecoRequestDTO } from "../types/dto/endereco/EnderecoRequestDTO";
 import { Periodo } from "../types/enums/Periodo";
 import { TipoAgendamento } from "../types/enums/TipoAgendamento";
@@ -19,7 +19,6 @@ import { getErrorMessage } from "../utils/error";
 import {
   formatAddress,
   formatCurrency,
-  formatDateTime,
   getPeriodoLabel,
   getTipoAtendimentoLabel,
 } from "../utils/formatters";
@@ -54,14 +53,14 @@ const serviceTypes = [
 
 const PedidoPage = () => {
   const { usuario } = useAuth();
+  const navigate = useNavigate();
   const [itens, setItens] = useState<ItemCardapio[]>([]);
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [periodo, setPeriodo] = useState<Periodo>(Periodo.Almoco);
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAgendamento>(
     TipoAgendamento.AtendimentoPresencial
   );
-  const [itensSelecionados, setItensSelecionados] = useState<number[]>([]);
+  const [itensQtd, setItensQtd] = useState<Record<number, number>>({});
   const [enderecoSelecionadoId, setEnderecoSelecionadoId] = useState<number | null>(
     null
   );
@@ -75,15 +74,22 @@ const PedidoPage = () => {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    setItensSelecionados((previous) =>
-      previous.filter((itemId) =>
-        itens.some((item) => item.id === itemId && item.periodo === periodo)
-      )
-    );
+    setItensQtd((prev) => {
+      const filtered: Record<number, number> = {};
+      for (const [id, qty] of Object.entries(prev)) {
+        const numId = Number(id);
+        if (itens.some((item) => item.id === numId && item.periodo === periodo)) {
+          filtered[numId] = qty;
+        }
+      }
+      return filtered;
+    });
   }, [itens, periodo]);
 
+  const usuarioId = usuario?.usuario?.id ?? usuario?.usuarioId;
+
   useEffect(() => {
-    if (!usuario) {
+    if (!usuarioId) {
       return;
     }
 
@@ -93,10 +99,9 @@ const PedidoPage = () => {
       setIsLoading(true);
       setError("");
 
-      const [itensResult, pedidosResult, enderecosResult] = await Promise.allSettled([
+      const [itensResult, enderecosResult] = await Promise.allSettled([
         listarItensCardapio(),
-        listarPedidosDoUsuario(usuario?.usuario?.id),
-        listarEnderecosDoUsuario(usuario?.usuario?.id),
+        listarEnderecosDoUsuario(usuarioId),
       ]);
 
       if (!isMounted) {
@@ -114,10 +119,6 @@ const PedidoPage = () => {
         );
       }
 
-      if (pedidosResult.status === "fulfilled") {
-        setPedidos(pedidosResult.value);
-      }
-
       if (enderecosResult.status === "fulfilled") {
         setEnderecos(enderecosResult.value);
         setEnderecoSelecionadoId(enderecosResult.value[0]?.id ?? null);
@@ -131,11 +132,16 @@ const PedidoPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [usuario]);
+  }, [usuarioId]);
 
   const itensDoPeriodo = useMemo(
     () => itens.filter((item) => item.periodo === periodo),
     [itens, periodo]
+  );
+
+  const itensSelecionados = useMemo(
+    () => Object.keys(itensQtd).map(Number).filter((id) => itensQtd[id] > 0),
+    [itensQtd]
   );
 
   const itensSelecionadosDetalhes = useMemo(
@@ -143,30 +149,23 @@ const PedidoPage = () => {
     [itens, itensSelecionados]
   );
 
-  const pedidosDoUsuario = useMemo(() => {
-    const nomeUsuario = usuario?.nomeUsuario?.toLowerCase();
-
-    return pedidos
-      .filter((pedido) => pedido.nomeUsuario.toLowerCase() === nomeUsuario)
-      .sort(
-        (left, right) =>
-          new Date(right.dataHora).getTime() - new Date(left.dataHora).getTime()
-      );
-  }, [pedidos, usuario?.nomeUsuario]);
-
   const subtotal = useMemo(
     () =>
-      itensSelecionadosDetalhes.reduce((total, item) => total + item.precoBase, 0),
-    [itensSelecionadosDetalhes]
+      itensSelecionadosDetalhes.reduce(
+        (total, item) => total + item.precoBase * (itensQtd[item.id] || 0),
+        0
+      ),
+    [itensSelecionadosDetalhes, itensQtd]
   );
 
   const desconto = useMemo(
     () =>
       itensSelecionadosDetalhes.reduce(
-        (total, item) => total + (item.ehSugestaoDoChefe ? item.precoBase * 0.2 : 0),
+        (total, item) =>
+          total + (item.ehSugestaoDoChefe ? item.precoBase * 0.2 * (itensQtd[item.id] || 0) : 0),
         0
       ),
-    [itensSelecionadosDetalhes]
+    [itensSelecionadosDetalhes, itensQtd]
   );
 
   const taxaEstimada = useMemo(() => {
@@ -193,12 +192,19 @@ const PedidoPage = () => {
     }));
   };
 
-  const toggleItem = (itemId: number) => {
-    setItensSelecionados((previous) =>
-      previous.includes(itemId)
-        ? previous.filter((selectedId) => selectedId !== itemId)
-        : [...previous, itemId]
-    );
+  const addItem = (itemId: number) => {
+    setItensQtd((prev) => ({ ...prev, [itemId]: (prev[itemId] || 0) + 1 }));
+  };
+
+  const removeItem = (itemId: number) => {
+    setItensQtd((prev) => {
+      const qty = (prev[itemId] || 0) - 1;
+      if (qty <= 0) {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [itemId]: qty };
+    });
   };
 
   const validateAddress = () => {
@@ -233,7 +239,7 @@ const PedidoPage = () => {
     setIsSavingAddress(true);
 
     try {
-      const createdAddress = await criarEndereco(usuario?.usuario?.id, novoEndereco);
+      const createdAddress = await criarEndereco(usuarioId!, novoEndereco);
 
       setEnderecos((previous) => [...previous, createdAddress]);
       setEnderecoSelecionadoId(createdAddress.id);
@@ -298,16 +304,18 @@ const PedidoPage = () => {
           throw new Error("Tipo de atendimento inválido.");
       }
 
-      const novoPedido = await criarPedido(usuario?.usuario?.id, {
+      const itensIds: number[] = [];
+      for (const [id, qty] of Object.entries(itensQtd)) {
+        for (let i = 0; i < qty; i++) itensIds.push(Number(id));
+      }
+
+      const novoPedido = await criarPedido(usuarioId!, {
         atendimentoId: atendimento.id,
-        itensIds: itensSelecionados,
+        itensIds,
         periodo,
       });
 
-      setPedidos((previous) => [novoPedido, ...previous]);
-      setItensSelecionados([]);
-      setObservacaoEntrega("");
-      setSuccess("Pedido criado com sucesso e registrado no historico.");
+      navigate("/pedidos/confirmacao", { state: { pedido: novoPedido } });
     } catch (error) {
       setError(
         getErrorMessage(
@@ -406,30 +414,48 @@ const PedidoPage = () => {
             </div>
           ) : (
             <div className="menu-grid">
-              {itensDoPeriodo.map((item) => (
-                <button
-                  key={item.id}
-                  className={`menu-card menu-card--selectable${
-                    itensSelecionados.includes(item.id) ? " is-selected" : ""
-                  }`}
-                  onClick={() => toggleItem(item.id)}
-                  type="button"
-                >
-                  <div className="menu-card__head">
-                    <span className="pill pill--outline">
-                      {getPeriodoLabel(item.periodo)}
-                    </span>
+              {itensDoPeriodo.map((item) => {
+                const qty = itensQtd[item.id] || 0;
+                return (
+                  <div
+                    key={item.id}
+                    className={`menu-card menu-card--selectable${qty > 0 ? " is-selected" : ""}`}
+                  >
+                    <div className="menu-card__head">
+                      <span className="pill pill--outline">
+                        {getPeriodoLabel(item.periodo)}
+                      </span>
 
-                    {item.ehSugestaoDoChefe ? (
-                      <span className="pill pill--highlight">20% off</span>
-                    ) : null}
+                      {item.ehSugestaoDoChefe ? (
+                        <span className="pill pill--highlight">20% off</span>
+                      ) : null}
+                    </div>
+
+                    <h3>{item.nome}</h3>
+                    <p>{item.descricao}</p>
+                    <strong>{formatCurrency(item.precoBase)}</strong>
+
+                    <div className="qty-control">
+                      <button
+                        className="qty-control__btn"
+                        disabled={qty === 0}
+                        onClick={() => removeItem(item.id)}
+                        type="button"
+                      >
+                        -
+                      </button>
+                      <span className="qty-control__value">{qty}</span>
+                      <button
+                        className="qty-control__btn"
+                        onClick={() => addItem(item.id)}
+                        type="button"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-
-                  <h3>{item.nome}</h3>
-                  <p>{item.descricao}</p>
-                  <strong>{formatCurrency(item.precoBase)}</strong>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -474,7 +500,7 @@ const PedidoPage = () => {
               {itensSelecionadosDetalhes.length > 0 ? (
                 itensSelecionadosDetalhes.map((item) => (
                   <span className="tag" key={item.id}>
-                    {item.nome}
+                    {itensQtd[item.id]}x {item.nome}
                   </span>
                 ))
               ) : (
@@ -619,65 +645,6 @@ const PedidoPage = () => {
 
       {error ? <div className="message message--error">{error}</div> : null}
       {success ? <div className="message message--success">{success}</div> : null}
-
-      <section className="panel panel--section">
-        <div className="panel__header">
-          <div>
-            <span className="kicker">Historico recente</span>
-            <h2>Pedidos do usuario autenticado</h2>
-          </div>
-        </div>
-
-        {pedidosDoUsuario.length === 0 ? (
-          <div className="empty-state">
-            <p>Seu historico vai aparecer aqui assim que o primeiro pedido for criado.</p>
-          </div>
-        ) : (
-          <div className="history-list">
-            {pedidosDoUsuario.map((pedido) => (
-              <article className="history-card" key={pedido.id}>
-                <div className="history-card__header">
-                  <div>
-                    <strong>Pedido #{pedido.id}</strong>
-                    <span>{formatDateTime(pedido.dataHora)}</span>
-                  </div>
-
-                  <span className="pill pill--outline">
-                    {getTipoAtendimentoLabel(pedido.tipoAtendimento)}
-                  </span>
-                </div>
-
-                <div className="tag-list">
-                  {pedido.itens.map((item) => (
-                    <span className="tag" key={`${pedido.id}-${item}`}>
-                      {item}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="summary-list summary-list--compact">
-                  <div>
-                    <span>Subtotal</span>
-                    <strong>{formatCurrency(pedido.subtotal)}</strong>
-                  </div>
-                  <div>
-                    <span>Desconto</span>
-                    <strong>{formatCurrency(pedido.desconto)}</strong>
-                  </div>
-                  <div>
-                    <span>Taxa</span>
-                    <strong>{formatCurrency(pedido.taxaEntrega)}</strong>
-                  </div>
-                  <div className="summary-list__total">
-                    <span>Total</span>
-                    <strong>{formatCurrency(pedido.total)}</strong>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
     </AppShell>
   );
 };

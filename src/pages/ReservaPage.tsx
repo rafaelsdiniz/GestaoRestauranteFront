@@ -1,32 +1,28 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
 import { listarMesasDisponiveis } from "../services/MesaService";
-import { cancelarReserva, criarReserva, listarReservasDoUsuario } from "../services/ReservaService";
+import { criarReserva } from "../services/ReservaService";
 import type { Mesa } from "../types/Mesa";
-import type { Reserva } from "../types/Reserva";
-import { StatusReserva } from "../types/enums/StatusReserva";
 import { getErrorMessage } from "../utils/error";
-import {
-  formatDateTime,
-  getStatusReservaLabel,
-  toDatetimeLocalValue,
-} from "../utils/formatters";
+import { toDatetimeLocalValue } from "../utils/formatters";
 
 const getDefaultReservationDate = () => {
   const date = new Date();
   date.setDate(date.getDate() + 1);
-  date.setHours(19, 0, 0, 0);
+  date.setHours(12, 0, 0, 0);
   return toDatetimeLocalValue(date);
 };
 
 const ReservaPage = () => {
   const { usuario } = useAuth();
+  const navigate = useNavigate();
+  const usuarioId = usuario?.usuario?.id ?? usuario?.usuarioId;
   const [dataHora, setDataHora] = useState(getDefaultReservationDate());
   const [pessoas, setPessoas] = useState(2);
   const [mesaId, setMesaId] = useState(0);
   const [mesas, setMesas] = useState<Mesa[]>([]);
-  const [reservas, setReservas] = useState<Reserva[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -39,41 +35,21 @@ const ReservaPage = () => {
       setIsLoading(true);
       setError("");
 
-      const [mesasResult, reservasResult] = await Promise.allSettled([
-        listarMesasDisponiveis(),
-        usuario?.usuario?.id
-          ? listarReservasDoUsuario(usuario.usuario.id)
-          : Promise.resolve([]),
-      ]);
-
-      if (!isMounted) return;
-
-      if (mesasResult.status === "fulfilled") {
-        setMesas(mesasResult.value);
-        if (mesasResult.value.length > 0 && mesaId === 0) {
-          setMesaId(mesasResult.value[0].id);
+      try {
+        const mesasData = await listarMesasDisponiveis();
+        if (!isMounted) return;
+        setMesas(mesasData);
+        if (mesasData.length > 0 && mesaId === 0) {
+          setMesaId(mesasData[0].id);
         }
-      } else {
+      } catch (err) {
+        if (!isMounted) return;
         setError(
-          getErrorMessage(
-            mesasResult.reason,
-            "Nao foi possivel carregar as mesas disponiveis."
-          )
+          getErrorMessage(err, "Nao foi possivel carregar as mesas disponiveis.")
         );
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-
-      if (reservasResult.status === "fulfilled") {
-        setReservas(reservasResult.value);
-      } else {
-        setError(
-          getErrorMessage(
-            reservasResult.reason,
-            "Nao foi possivel carregar o historico de reservas."
-          )
-        );
-      }
-
-      setIsLoading(false);
     };
 
     void loadData();
@@ -81,15 +57,7 @@ const ReservaPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [usuario?.usuario?.id]);
-
-  const reservasDoUsuario = useMemo(() => {
-    return reservas.sort(
-      (left, right) =>
-        new Date(left.dataHoraReserva).getTime() -
-        new Date(right.dataHoraReserva).getTime()
-    );
-  }, [reservas]);
+  }, []);
 
   const selectedTable = mesas.find((table) => table.id === mesaId);
 
@@ -110,8 +78,8 @@ const ReservaPage = () => {
       return "A reserva precisa ter pelo menos um dia de antecedencia.";
     }
 
-    if (reservationHour < 19 || reservationHour > 22) {
-      return "As reservas estao limitadas ao jantar, entre 19h e 22h.";
+    if (reservationHour < 11 || reservationHour > 14) {
+      return "As reservas estao limitadas ao almoco, entre 11h e 14h.";
     }
 
     if (selectedTable && pessoas > selectedTable.capacidade) {
@@ -141,17 +109,13 @@ const ReservaPage = () => {
     setIsSubmitting(true);
 
     try {
-      const novaReserva = await criarReserva(usuario?.usuario?.id, {
+      const novaReserva = await criarReserva(usuarioId!, {
         dataHoraReserva: dataHora,
         quantidadePessoas: pessoas,
         mesaId,
       });
 
-      setReservas((previous) => [...previous, novaReserva]);
-      setSuccess("Reserva criada com sucesso para o jantar.");
-      setDataHora(getDefaultReservationDate());
-      setPessoas(2);
-      setMesaId(3);
+      navigate("/reservas/confirmacao", { state: { reserva: novaReserva } });
     } catch (error) {
       setError(
         getErrorMessage(
@@ -164,35 +128,6 @@ const ReservaPage = () => {
     }
   };
 
-  const handleCancelReservation = async (reservationId: number) => {
-    setError("");
-    setSuccess("");
-
-    try {
-      if (!usuario?.usuario?.id) {
-        throw new Error("Usuário não autenticado.");
-      }
-      await cancelarReserva(usuario.usuario.id, reservationId);
-
-      setReservas((previous) =>
-        previous.map((reserva) =>
-          reserva.id === reservationId
-            ? { ...reserva, statusReserva: StatusReserva.Cancelada }
-            : reserva
-        )
-      );
-
-      setSuccess("Reserva cancelada com sucesso.");
-    } catch (error) {
-      setError(
-        getErrorMessage(
-          error,
-          "Nao foi possivel cancelar essa reserva agora."
-        )
-      );
-    }
-  };
-
   return (
     <AppShell contentClassName="page">
       <section className="hero hero--compact">
@@ -200,7 +135,7 @@ const ReservaPage = () => {
           <span className="kicker">Reservas</span>
           <h1>Reserve sua mesa</h1>
           <p className="hero__lead">
-            Agende uma mesa para o jantar entre 19h e 22h com pelo menos
+            Agende uma mesa para o almoco entre 11h e 14h com pelo menos
             um dia de antecedencia. Escolha a mesa pela capacidade.
           </p>
         </div>
@@ -211,7 +146,7 @@ const ReservaPage = () => {
           <div className="panel__header">
             <div>
               <span className="kicker">Nova reserva</span>
-              <h2>Agendar jantar</h2>
+              <h2>Agendar almoco</h2>
             </div>
           </div>
 
@@ -256,7 +191,7 @@ const ReservaPage = () => {
               <div className="summary-list summary-list--compact">
                 <div>
                   <span>Janela valida</span>
-                  <strong>19h ate 22h</strong>
+                  <strong>11h ate 14h</strong>
                 </div>
                 <div>
                   <span>Antecedencia</span>
@@ -290,7 +225,7 @@ const ReservaPage = () => {
           <div className="rule-list">
             <div className="rule-item">
               <span className="rule-item__index" />
-              <p>Reserva focada no jantar, com horario entre 19h e 22h.</p>
+              <p>Reserva focada no almoco, com horario entre 11h e 14h.</p>
             </div>
             <div className="rule-item">
               <span className="rule-item__index" />
@@ -310,74 +245,6 @@ const ReservaPage = () => {
 
       {error ? <div className="message message--error">{error}</div> : null}
       {success ? <div className="message message--success">{success}</div> : null}
-
-      <section className="panel panel--section">
-        <div className="panel__header">
-          <div>
-            <span className="kicker">Historico do cliente</span>
-            <h2>Reservas registradas</h2>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="loading-state">
-            <span className="route-status__spinner" />
-            <p>Carregando reservas...</p>
-          </div>
-        ) : reservasDoUsuario.length === 0 ? (
-          <div className="empty-state">
-            <p>Nenhuma reserva encontrada para o usuario autenticado.</p>
-          </div>
-        ) : (
-          <div className="history-list">
-            {reservasDoUsuario.map((reserva) => {
-              const isCancelable =
-                reserva.statusReserva === StatusReserva.Ativa ||
-                reserva.statusReserva === StatusReserva.Confirmada;
-
-              return (
-                <article className="history-card" key={reserva.id}>
-                  <div className="history-card__header">
-                    <div>
-                      <strong>Reserva #{reserva.id}</strong>
-                      <span>{formatDateTime(reserva.dataHoraReserva)}</span>
-                    </div>
-
-                    <span className="pill pill--outline">
-                      {getStatusReservaLabel(reserva.statusReserva)}
-                    </span>
-                  </div>
-
-                  <div className="summary-list summary-list--compact">
-                    <div>
-                      <span>Pessoas</span>
-                      <strong>{reserva.quantidadePessoas}</strong>
-                    </div>
-                    <div>
-                      <span>Mesa</span>
-                      <strong>{reserva.numeroMesa}</strong>
-                    </div>
-                    <div>
-                      <span>Codigo</span>
-                      <strong>{reserva.codigoConfirmacao ?? "Nao informado"}</strong>
-                    </div>
-                  </div>
-
-                  {isCancelable ? (
-                    <button
-                      className="button button--ghost"
-                      onClick={() => handleCancelReservation(reserva.id)}
-                      type="button"
-                    >
-                      Cancelar reserva
-                    </button>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
     </AppShell>
   );
 };
