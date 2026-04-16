@@ -279,14 +279,21 @@ button {
   border-radius: 8px;
   background: linear-gradient(135deg, var(--gold), var(--gold-dark));
   color: #1C1917;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 700;
   font-size: 0.95rem;
   flex-shrink: 0;
 }
 
+.admin-sidebar__logo-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .admin-sidebar__title {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 1.15rem;
   font-weight: 600;
   color: #F0EBE0;
@@ -298,7 +305,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--gold);
-  margin-left: calc(36px + 0.65rem);
+  margin-left: 0;
 }
 
 .admin-sidebar__nav {
@@ -2382,13 +2389,21 @@ button {
 }
 
 .auth-panel__brand {
-  margin-top: auto;
-  opacity: 0.3;
+  align-items: center;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  margin: 0 auto;
+  min-height: 180px;
+  opacity: 0.95;
+  width: 100%;
 }
 
 .auth-panel__brand img {
-  max-height: 80px;
   border-radius: var(--radius);
+  max-height: 170px;
+  object-fit: contain;
+  width: min(280px, 82%);
 }
 
 .auth-container {
@@ -3177,6 +3192,15 @@ button {
   min-height: auto;
 }
 
+/* Padroniza fonte do admin inteiro para a body (Inter) */
+.admin-page h1,
+.admin-page h2,
+.admin-page h3,
+.admin-page .card__title,
+.admin-page .section__title {
+  font-family: var(--font-body);
+}
+
 .admin-tabs {
   display: flex;
   align-items: center;
@@ -3246,7 +3270,7 @@ button {
 
 .admin-stat__value {
   display: block;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 1.6rem;
   font-weight: 700;
   color: var(--gold-dark);

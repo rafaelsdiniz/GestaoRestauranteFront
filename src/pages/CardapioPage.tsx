@@ -10,6 +10,7 @@ import {
   listarItensCardapio,
 } from "../services/ItemCardapioService";
 import { listarSugestoes } from "../services/SugestaoChefe";
+import { getHorariosPublicos, type HorariosPublicosDTO } from "../services/ConfiguracaoService";
 import {
   criarAtendimentoPresencial,
   criarAtendimentoDeliveryProprio,
@@ -60,6 +61,26 @@ const emptyAddress: EnderecoRequestDTO = {
   cep: "",
 };
 
+const defaultHorarios: HorariosPublicosDTO = {
+  almocoInicio: "11:00",
+  almocoFim: "14:00",
+  jantarInicio: "18:00",
+  jantarFim: "22:00",
+  reservaInicio: "11:00",
+  reservaFim: "14:00",
+  antecedenciaMinimaDias: 1,
+};
+
+const parseTimeToMinutes = (time: string) => {
+  const [hours, minutes] = time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return 0;
+  }
+  return hours * 60 + minutes;
+};
+
+const formatTimeRange = (start: string, end: string) => `${start} as ${end}`;
+
 const serviceTypes = [
   {
     value: TipoAgendamento.AtendimentoPresencial,
@@ -87,19 +108,39 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
   const [itens, setItens] = useState<ItemCardapio[]>([]);
   const [sugestoes, setSugestoes] = useState<SugestaoChefe[]>([]);
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
+  const [horarios, setHorarios] = useState<HorariosPublicosDTO>(defaultHorarios);
+  const [now, setNow] = useState(() => new Date());
+  const [didSyncPeriodoByHorario, setDidSyncPeriodoByHorario] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   // --- Period by time ---
-  const getHoraAtual = () => new Date().getHours();
   const getPeriodoAtual = (): Periodo | null => {
-    const h = getHoraAtual();
-    if (h >= 11 && h < 15) return Periodo.Almoco;
-    if (h >= 18 && h < 22) return Periodo.Jantar;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    if (
+      currentMinutes >= parseTimeToMinutes(horarios.almocoInicio) &&
+      currentMinutes < parseTimeToMinutes(horarios.almocoFim)
+    ) {
+      return Periodo.Almoco;
+    }
+    if (
+      currentMinutes >= parseTimeToMinutes(horarios.jantarInicio) &&
+      currentMinutes < parseTimeToMinutes(horarios.jantarFim)
+    ) {
+      return Periodo.Jantar;
+    }
     return null;
   };
   const periodoAtual = getPeriodoAtual();
   const foraDeHorario = periodoAtual === null;
+  const horarioFuncionamentoLabel = `Almoco: ${formatTimeRange(
+    horarios.almocoInicio,
+    horarios.almocoFim
+  )} | Jantar: ${formatTimeRange(horarios.jantarInicio, horarios.jantarFim)}`;
+  const periodoHorarioLabel = (value: Periodo) =>
+    value === Periodo.Almoco
+      ? `almoco (${formatTimeRange(horarios.almocoInicio, horarios.almocoFim)})`
+      : `jantar (${formatTimeRange(horarios.jantarInicio, horarios.jantarFim)})`;
 
   // --- Order state ---
   const [periodo, setPeriodo] = useState<Periodo>(periodoAtual ?? Periodo.Almoco);
@@ -136,6 +177,7 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
       const promises: Promise<unknown>[] = [
         listarItensCardapio(),
         listarSugestoes(),
+        getHorariosPublicos(),
       ];
 
       if (noShell) {
@@ -161,8 +203,12 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
         setSugestoes(results[1].value as SugestaoChefe[]);
       }
 
-      if (results[2]?.status === "fulfilled") {
-        setIngredientes(results[2].value as Ingrediente[]);
+      if (results[2].status === "fulfilled") {
+        setHorarios(results[2].value as HorariosPublicosDTO);
+      }
+
+      if (results[3]?.status === "fulfilled") {
+        setIngredientes(results[3].value as Ingrediente[]);
       }
 
       setIsLoading(false);
@@ -171,6 +217,17 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
     void loadData();
     return () => { isMounted = false; };
   }, [noShell]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (didSyncPeriodoByHorario || !periodoAtual) return;
+    setPeriodo(periodoAtual);
+    setDidSyncPeriodoByHorario(true);
+  }, [didSyncPeriodoByHorario, periodoAtual]);
 
   // --- Load addresses when logged in and delivery selected ---
   const isDelivery = tipoAtendimento !== TipoAgendamento.AtendimentoPresencial;
@@ -230,11 +287,11 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
       almoco:
         sugestoesHoje.find((s) => s.periodo === Periodo.Almoco)?.nomeItem ??
         fallbackAlmoco?.nome ??
-        "Selecione uma sugestao de almoco",
+        "Sugestao do chefe ainda não selecionada",
       jantar:
         sugestoesHoje.find((s) => s.periodo === Periodo.Jantar)?.nomeItem ??
         fallbackJantar?.nome ??
-        "Selecione uma sugestao de jantar",
+        "Sugestao do chefe ainda não selecionada",
     };
   }, [itensAlmoco, itensJantar, sugestoes]);
 
@@ -334,12 +391,12 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
     setOrderSuccess("");
 
     if (foraDeHorario) {
-      setOrderError("Estamos fora do horario de funcionamento. Almoco: 11h as 15h | Jantar: 18h as 22h.");
+      setOrderError(`Estamos fora do horario de funcionamento. ${horarioFuncionamentoLabel}.`);
       return;
     }
 
     if (periodo !== periodoAtual) {
-      setOrderError(`Fora do horario de ${periodo === Periodo.Almoco ? "almoco (11h-15h)" : "jantar (18h-22h)"}.`);
+      setOrderError(`Fora do horario de ${periodoHorarioLabel(periodo)}.`);
       return;
     }
 
@@ -975,12 +1032,12 @@ const CardapioPage = ({ noShell }: CardapioPageProps = {}) => {
       {/* Aviso de horario */}
       {foraDeHorario && (
         <div className="message message--warning">
-          Estamos fora do horario de funcionamento. Almoco: 11h as 15h | Jantar: 18h as 22h. Voce pode consultar o cardapio, mas pedidos estao indisponiveis.
+          Estamos fora do horario de funcionamento. {horarioFuncionamentoLabel}. Voce pode consultar o cardapio, mas pedidos estao indisponiveis.
         </div>
       )}
       {!foraDeHorario && periodo !== periodoAtual && (
         <div className="message message--warning">
-          O cardapio de {periodo === Periodo.Almoco ? "almoco" : "jantar"} esta fora do horario. Pedidos disponiveis apenas para {periodoAtual === Periodo.Almoco ? "almoco (11h-15h)" : "jantar (18h-22h)"}.
+          O cardapio de {periodo === Periodo.Almoco ? "almoco" : "jantar"} esta fora do horario. Pedidos disponiveis apenas para {periodoHorarioLabel(periodoAtual)}.
         </div>
       )}
 

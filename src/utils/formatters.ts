@@ -25,7 +25,7 @@ const twoDigits = (value: number) => value.toString().padStart(2, "0");
 export const formatCurrency = (value: number) =>
   currencyFormatter.format(Number.isFinite(value) ? value : 0);
 
-export const formatDate = (value?: string) => {
+export const formatDate = (value?: string | null) => {
   if (!value) {
     return "--";
   }
@@ -39,7 +39,7 @@ export const formatDate = (value?: string) => {
   return dateFormatter.format(parsedDate);
 };
 
-export const formatDateTime = (value?: string) => {
+export const formatDateTime = (value?: string | null) => {
   if (!value) {
     return "--";
   }

@@ -4,6 +4,7 @@ import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
 import { listarItensCardapio } from "../services/ItemCardapioService";
 import { listarSugestoes } from "../services/SugestaoChefe";
+import { getHorariosPublicos, type HorariosPublicosDTO } from "../services/ConfiguracaoService";
 import type { ItemCardapio } from "../types/ItemCardapio";
 import type { SugestaoChefe } from "../types/SugestaoChefe";
 import { Periodo } from "../types/enums/Periodo";
@@ -13,24 +14,37 @@ import {
   toDateInputValue,
 } from "../utils/formatters";
 
+const defaultHorarios: HorariosPublicosDTO = {
+  almocoInicio: "11:00",
+  almocoFim: "14:00",
+  jantarInicio: "18:00",
+  jantarFim: "22:00",
+  reservaInicio: "11:00",
+  reservaFim: "14:00",
+  antecedenciaMinimaDias: 1,
+};
+
 const LandingPage = () => {
   const { isAuthenticated, isAdmin } = useAuth();
 
   const [itens, setItens] = useState<ItemCardapio[]>([]);
   const [sugestoes, setSugestoes] = useState<SugestaoChefe[]>([]);
+  const [horarios, setHorarios] = useState<HorariosPublicosDTO>(defaultHorarios);
   const [loadingMenu, setLoadingMenu] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       setLoadingMenu(true);
-      const [itensR, sugR] = await Promise.allSettled([
+      const [itensR, sugR, horariosR] = await Promise.allSettled([
         listarItensCardapio(),
         listarSugestoes(),
+        getHorariosPublicos(),
       ]);
       if (!mounted) return;
       if (itensR.status === "fulfilled") setItens(itensR.value);
       if (sugR.status === "fulfilled") setSugestoes(sugR.value);
+      if (horariosR.status === "fulfilled") setHorarios(horariosR.value);
       setLoadingMenu(false);
     };
     void load();
@@ -53,6 +67,11 @@ const LandingPage = () => {
 
   const previewAlmoco = itensAlmoco.slice(0, 3);
   const previewJantar = itensJantar.slice(0, 3);
+  const reservaRange = `${horarios.reservaInicio}-${horarios.reservaFim}`;
+  const antecedenciaLabel =
+    horarios.antecedenciaMinimaDias === 1
+      ? "1 dia de antecedencia"
+      : `${horarios.antecedenciaMinimaDias} dias de antecedencia`;
 
   const renderCardapioPreview = (periodoLabel: string, items: ItemCardapio[]) => (
     <div className="cardapio-section">
@@ -133,7 +152,7 @@ const LandingPage = () => {
             <div className="landing-card__content">
               <h3>Delivery e Reservas</h3>
               <p>
-                Peca para entrega ou reserve sua mesa para o almoco entre 11h e 14h.
+                Peca para entrega ou reserve sua mesa entre {horarios.reservaInicio} e {horarios.reservaFim}.
               </p>
             </div>
           </Link>
@@ -157,8 +176,8 @@ const LandingPage = () => {
               <span className="stat-item__label">Tipos de atendimento</span>
             </div>
             <div className="stat-item">
-              <span className="stat-item__value">11h-14h</span>
-              <span className="stat-item__label">Reservas de almoco</span>
+              <span className="stat-item__value">{reservaRange}</span>
+              <span className="stat-item__label">Horario de reservas</span>
             </div>
           </div>
         </div>
@@ -267,7 +286,7 @@ const LandingPage = () => {
               <div className="cta-card-landing__icon">&#128197;</div>
               <div>
                 <h3>Reservar Mesa</h3>
-                <p>Agende para o almoco entre 11h e 14h com antecedencia.</p>
+                <p>Agende entre {horarios.reservaInicio} e {horarios.reservaFim} com {antecedenciaLabel}.</p>
               </div>
               <span className="cta-card-landing__arrow">&rarr;</span>
             </Link>

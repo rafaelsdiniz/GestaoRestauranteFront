@@ -8,7 +8,7 @@ interface AppShellProps {
 }
 
 const AppShell = ({ children, contentClassName }: AppShellProps) => {
-  const { isAuthenticated, isAdmin, logout, usuario } = useAuth();
+  const { isAuthenticated, isAdmin, logout } = useAuth();
 
   return (
     <div className="app-shell">

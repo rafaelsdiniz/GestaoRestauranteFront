@@ -16,7 +16,7 @@ const trackingSteps = [
   { key: StatusPedido.Entregue, label: "Entregue" },
 ];
 
-const statusOrder = [
+const statusOrder: StatusPedido[] = [
   StatusPedido.Recebido,
   StatusPedido.EmPreparo,
   StatusPedido.Pronto,

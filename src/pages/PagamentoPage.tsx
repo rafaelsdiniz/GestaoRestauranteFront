@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import AppShell from "../components/AppShell";
 import type { Pedido } from "../types/Pedido";
 import { formatCurrency } from "../utils/formatters";
@@ -42,7 +43,48 @@ const PagamentoPage = () => {
     return <Navigate to="/cardapio" replace />;
   }
 
+  // Monta payload Pix copia-e-cola (EMV QR Code padrao BCB)
+  const buildPixPayload = () => {
+    const pixKey = "5563984592035";
+    const merchantName = "BRAVO RESTAURANTE";
+    const merchantCity = "SAO PAULO";
+
+    const formatField = (id: string, value: string) =>
+      `${id}${value.length.toString().padStart(2, "0")}${value}`;
+
+    const merchantAccount =
+      formatField("00", "br.gov.bcb.pix") + formatField("01", pixKey);
+
+    let payload =
+      formatField("00", "01") + // Payload Format Indicator
+      formatField("26", merchantAccount) + // Merchant Account Info
+      formatField("52", "0000") + // Merchant Category Code
+      formatField("53", "986") + // Transaction Currency (BRL)
+      formatField("54", (pedido.total / 100).toFixed(2)) + // Transaction Amount
+      formatField("58", "BR") + // Country Code
+      formatField("59", merchantName) + // Merchant Name
+      formatField("60", merchantCity); // Merchant City
+
+    // CRC16 placeholder — 4 chars
+    payload += "6304";
+
+    // Calcula CRC16-CCITT
+    let crc = 0xffff;
+    for (let i = 0; i < payload.length; i++) {
+      crc ^= payload.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) {
+        crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
+      }
+    }
+    crc &= 0xffff;
+
+    return payload + crc.toString(16).toUpperCase().padStart(4, "0");
+  };
+
+  const pixPayload = buildPixPayload();
+
   const handleCopyPix = () => {
+    void navigator.clipboard.writeText(pixPayload);
     setPixCopied(true);
     setTimeout(() => setPixCopied(false), 2000);
   };
@@ -94,16 +136,14 @@ const PagamentoPage = () => {
           {/* Pix */}
           {metodo === "pix" && (
             <div className="panel panel--soft">
-              <div className="qr-placeholder">
-                <div className="qr-placeholder__grid">
-                  {Array.from({ length: 64 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="qr-placeholder__cell"
-                      style={{ opacity: Math.random() > 0.4 ? 1 : 0.15 }}
-                    />
-                  ))}
-                </div>
+              <div style={{ display: "flex", justifyContent: "center", padding: "1rem 0" }}>
+                <QRCodeSVG
+                  value={pixPayload}
+                  size={200}
+                  bgColor="#ffffff"
+                  fgColor="#1a1a1a"
+                  level="M"
+                />
               </div>
               <p style={{ textAlign: "center", fontSize: "0.85rem", color: "var(--cream-muted)", marginTop: "0.75rem" }}>
                 Escaneie o QR Code ou copie o codigo abaixo
@@ -112,7 +152,7 @@ const PagamentoPage = () => {
                 <input
                   type="text"
                   readOnly
-                  value="00020126580014br.gov.bcb.pix0136bravo-restaurante-pix-simulado"
+                  value={pixPayload}
                   style={{ flex: 1, fontSize: "0.78rem" }}
                 />
                 <button className="button button--secondary" onClick={handleCopyPix} type="button">

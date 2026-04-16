@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
+  BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
@@ -22,6 +22,7 @@ import {
 import { listarItensCardapio } from "../services/ItemCardapioService";
 import { faturamentoPorTipo, itensMaisVendidos, type FaturamentoPorTipo, type ItemMaisVendido } from "../services/RelatorioService";
 import { criarSugestao, listarSugestoes } from "../services/SugestaoChefe";
+import { getConfiguracoes, atualizarConfiguracoes, type ConfiguracaoRestauranteDTO } from "../services/ConfiguracaoService";
 import type { ItemCardapio } from "../types/ItemCardapio";
 import type { SugestaoChefe } from "../types/SugestaoChefe";
 import { Periodo } from "../types/enums/Periodo";
@@ -50,7 +51,7 @@ const labelStatusPedido: Record<string, string> = {
   Cancelado: "Cancelado",
 };
 
-type AdminSection = "dashboard" | "pedidos" | "reservas" | "clientes" | "relatorios" | "sugestoes";
+type AdminSection = "dashboard" | "pedidos" | "reservas" | "clientes" | "relatorios" | "sugestoes" | "configuracoes";
 
 interface AdminPageProps {
   section?: AdminSection;
@@ -76,6 +77,14 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
   const [sugestaoPeriodo, setSugestaoPeriodo] = useState<Periodo>(Periodo.Almoco);
   const [sugestaoData, setSugestaoData] = useState(toDateInputValue(today));
   const [itemSugestaoId, setItemSugestaoId] = useState<number>(0);
+  const [configuracao, setConfiguracao] = useState<ConfiguracaoRestauranteDTO | null>(null);
+  const [configForm, setConfigForm] = useState<ConfiguracaoRestauranteDTO>({
+    almocoInicio: "11:00", almocoFim: "14:00",
+    jantarInicio: "18:00", jantarFim: "22:00",
+    reservaInicio: "11:00", reservaFim: "14:00",
+    antecedenciaMinimaDias: 1,
+  });
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -114,6 +123,41 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
   }, [rangeEnd, rangeStart]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
+
+  // Lazy load configuracoes
+  useEffect(() => {
+    if (section !== "configuracoes" || configLoaded) return;
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await getConfiguracoes();
+        if (!mounted) return;
+        setConfiguracao(data);
+        setConfigForm(data);
+        setConfigLoaded(true);
+      } catch (err) {
+        if (mounted) setError(getErrorMessage(err, "Erro ao carregar configuracoes."));
+      }
+    };
+    void load();
+    return () => { mounted = false; };
+  }, [section, configLoaded]);
+
+  const handleSaveConfig = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(""); setSuccess("");
+    setIsSaving(true);
+    try {
+      const updated = await atualizarConfiguracoes(configForm);
+      setConfiguracao(updated);
+      setConfigForm(updated);
+      setSuccess("Configuracoes salvas com sucesso.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Erro ao salvar configuracoes."));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const availableItems = useMemo(
     () => itens.filter(i => i.periodo === sugestaoPeriodo), [itens, sugestaoPeriodo]);
@@ -193,6 +237,7 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
     clientes: "Gestao de Clientes",
     relatorios: "Relatorios",
     sugestoes: "Sugestao do Chef",
+    configuracoes: "Configuracoes",
   };
 
   const CHART_COLORS = ["#B08C3E", "#C9A652", "#8A6C2A", "#8b2635", "#3D8C5C", "#5BA3D9", "#D4A853"];
@@ -856,6 +901,95 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
     </div>
   );
 
+  const renderConfiguracoes = () => (
+    <div className="admin-grid">
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Horarios</span>
+            <h3 className="card__title">Horario de funcionamento</h3>
+          </div>
+        </div>
+        <form className="form-grid form-grid--two" style={{ gap: "0.75rem" }} onSubmit={handleSaveConfig}>
+          <label className="field">
+            <span className="field__label">Almoco - Inicio</span>
+            <input className="field__input" type="time" value={configForm.almocoInicio}
+              onChange={e => setConfigForm(prev => ({ ...prev, almocoInicio: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span className="field__label">Almoco - Fim</span>
+            <input className="field__input" type="time" value={configForm.almocoFim}
+              onChange={e => setConfigForm(prev => ({ ...prev, almocoFim: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span className="field__label">Jantar - Inicio</span>
+            <input className="field__input" type="time" value={configForm.jantarInicio}
+              onChange={e => setConfigForm(prev => ({ ...prev, jantarInicio: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span className="field__label">Jantar - Fim</span>
+            <input className="field__input" type="time" value={configForm.jantarFim}
+              onChange={e => setConfigForm(prev => ({ ...prev, jantarFim: e.target.value }))} />
+          </label>
+
+          <div className="field--full" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+            <span className="card__label" style={{ marginBottom: "0.75rem", display: "block" }}>Reservas</span>
+          </div>
+          <label className="field">
+            <span className="field__label">Reserva - Inicio</span>
+            <input className="field__input" type="time" value={configForm.reservaInicio}
+              onChange={e => setConfigForm(prev => ({ ...prev, reservaInicio: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span className="field__label">Reserva - Fim</span>
+            <input className="field__input" type="time" value={configForm.reservaFim}
+              onChange={e => setConfigForm(prev => ({ ...prev, reservaFim: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span className="field__label">Antecedencia minima (dias)</span>
+            <input className="field__input" type="number" min={0} max={30} value={configForm.antecedenciaMinimaDias}
+              onChange={e => setConfigForm(prev => ({ ...prev, antecedenciaMinimaDias: Number(e.target.value) }))} />
+          </label>
+
+          <button className="btn btn--primary btn--block field--full" disabled={isSaving} type="submit" style={{ marginTop: "0.5rem" }}>
+            {isSaving ? "Salvando..." : "Salvar configuracoes"}
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <span className="card__label">Resumo atual</span>
+            <h3 className="card__title">Configuracao vigente</h3>
+          </div>
+        </div>
+        {configuracao ? (
+          <div className="admin-list">
+            <div className="admin-list__item">
+              <div><strong>Almoco</strong></div>
+              <div className="admin-list__right">{configuracao.almocoInicio} - {configuracao.almocoFim}</div>
+            </div>
+            <div className="admin-list__item">
+              <div><strong>Jantar</strong></div>
+              <div className="admin-list__right">{configuracao.jantarInicio} - {configuracao.jantarFim}</div>
+            </div>
+            <div className="admin-list__item">
+              <div><strong>Reservas</strong></div>
+              <div className="admin-list__right">{configuracao.reservaInicio} - {configuracao.reservaFim}</div>
+            </div>
+            <div className="admin-list__item">
+              <div><strong>Antecedencia minima</strong></div>
+              <div className="admin-list__right">{configuracao.antecedenciaMinimaDias} dia(s)</div>
+            </div>
+          </div>
+        ) : (
+          <div className="empty">Carregando configuracoes...</div>
+        )}
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (section) {
       case "dashboard": return renderDashboard();
@@ -864,13 +998,14 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
       case "clientes": return renderClientes();
       case "relatorios": return renderRelatorios();
       case "sugestoes": return renderSugestoes();
+      case "configuracoes": return renderConfiguracoes();
     }
   };
 
   return (
     <div className="admin-page admin-page--shell">
       <div className="section__header animate-in">
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", fontWeight: 600 }}>
+        <h1 style={{ fontSize: "1.6rem", fontWeight: 600 }}>
           {sectionTitle[section]}
         </h1>
       </div>

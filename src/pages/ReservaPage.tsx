@@ -4,6 +4,7 @@ import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
 import { listarMesasDisponiveis } from "../services/MesaService";
 import { criarReserva } from "../services/ReservaService";
+import { getHorariosPublicos, type HorariosPublicosDTO } from "../services/ConfiguracaoService";
 import type { Mesa } from "../types/Mesa";
 import { getErrorMessage } from "../utils/error";
 import { toDatetimeLocalValue } from "../utils/formatters";
@@ -23,6 +24,7 @@ const ReservaPage = () => {
   const [pessoas, setPessoas] = useState(2);
   const [mesaId, setMesaId] = useState(0);
   const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [horarios, setHorarios] = useState<HorariosPublicosDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -36,16 +38,20 @@ const ReservaPage = () => {
       setError("");
 
       try {
-        const mesasData = await listarMesasDisponiveis();
+        const [mesasData, horariosData] = await Promise.all([
+          listarMesasDisponiveis(),
+          getHorariosPublicos(),
+        ]);
         if (!isMounted) return;
         setMesas(mesasData);
+        setHorarios(horariosData);
         if (mesasData.length > 0 && mesaId === 0) {
           setMesaId(mesasData[0].id);
         }
       } catch (err) {
         if (!isMounted) return;
         setError(
-          getErrorMessage(err, "Nao foi possivel carregar as mesas disponiveis.")
+          getErrorMessage(err, "Nao foi possivel carregar os dados.")
         );
       } finally {
         if (isMounted) setIsLoading(false);
@@ -61,11 +67,20 @@ const ReservaPage = () => {
 
   const selectedTable = mesas.find((table) => table.id === mesaId);
 
+  const parseTime = (time: string) => {
+    const [h, m] = time.split(":").map(Number);
+    return h + m / 60;
+  };
+
+  const reservaInicio = horarios ? parseTime(horarios.reservaInicio) : 11;
+  const reservaFim = horarios ? parseTime(horarios.reservaFim) : 14;
+  const antecedenciaDias = horarios?.antecedenciaMinimaDias ?? 1;
+
   const validateReservation = () => {
     const reservationDate = new Date(dataHora);
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDate = new Date();
+    minDate.setHours(0, 0, 0, 0);
+    minDate.setDate(minDate.getDate() + antecedenciaDias);
 
     const reservationHour =
       reservationDate.getHours() + reservationDate.getMinutes() / 60;
@@ -74,12 +89,12 @@ const ReservaPage = () => {
       return "Selecione uma data e horario validos.";
     }
 
-    if (reservationDate < tomorrow) {
-      return "A reserva precisa ter pelo menos um dia de antecedencia.";
+    if (reservationDate < minDate) {
+      return `A reserva precisa ter pelo menos ${antecedenciaDias} dia(s) de antecedencia.`;
     }
 
-    if (reservationHour < 11 || reservationHour > 14) {
-      return "As reservas estao limitadas ao almoco, entre 11h e 14h.";
+    if (reservationHour < reservaInicio || reservationHour > reservaFim) {
+      return `As reservas estao disponiveis entre ${horarios?.reservaInicio ?? "11:00"} e ${horarios?.reservaFim ?? "14:00"}.`;
     }
 
     if (selectedTable && pessoas > selectedTable.capacidade) {
@@ -135,8 +150,8 @@ const ReservaPage = () => {
           <span className="kicker">Reservas</span>
           <h1>Reserve sua mesa</h1>
           <p className="hero__lead">
-            Agende uma mesa para o almoco entre 11h e 14h com pelo menos
-            um dia de antecedencia. Escolha a mesa pela capacidade.
+            Agende uma mesa entre {horarios?.reservaInicio ?? "11:00"} e {horarios?.reservaFim ?? "14:00"} com pelo menos{" "}
+            {antecedenciaDias} dia(s) de antecedencia. Escolha a mesa pela capacidade.
           </p>
         </div>
       </section>
@@ -191,11 +206,11 @@ const ReservaPage = () => {
               <div className="summary-list summary-list--compact">
                 <div>
                   <span>Janela valida</span>
-                  <strong>11h ate 14h</strong>
+                  <strong>{horarios?.reservaInicio ?? "11:00"} ate {horarios?.reservaFim ?? "14:00"}</strong>
                 </div>
                 <div>
                   <span>Antecedencia</span>
-                  <strong>Minimo de 1 dia</strong>
+                  <strong>Minimo de {antecedenciaDias} dia(s)</strong>
                 </div>
                 <div>
                   <span>Mesa escolhida</span>
@@ -208,7 +223,7 @@ const ReservaPage = () => {
               </div>
             </div>
 
-            <button className="button button--primary button--block field--full" disabled={isSubmitting} type="submit">
+            <button className="button button--primary button--block field--full" disabled={isLoading || isSubmitting} type="submit">
               {isSubmitting ? "Salvando reserva..." : "Confirmar reserva"}
             </button>
           </form>
@@ -225,11 +240,11 @@ const ReservaPage = () => {
           <div className="rule-list">
             <div className="rule-item">
               <span className="rule-item__index" />
-              <p>Reserva focada no almoco, com horario entre 11h e 14h.</p>
+              <p>Reservas disponiveis entre {horarios?.reservaInicio ?? "11:00"} e {horarios?.reservaFim ?? "14:00"}.</p>
             </div>
             <div className="rule-item">
               <span className="rule-item__index" />
-              <p>Antecedencia minima de um dia para respeitar a regra de negocio.</p>
+              <p>Antecedencia minima de {antecedenciaDias} dia(s) para respeitar a regra de negocio.</p>
             </div>
             <div className="rule-item">
               <span className="rule-item__index" />

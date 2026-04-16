@@ -19,7 +19,8 @@
       "Bash(curl -s http://localhost:5173)",
       "Bash(npm install:*)",
       "Bash(npm ls:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(pnpm add *)"
     ]
   }
 }

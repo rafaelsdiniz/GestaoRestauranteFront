@@ -51,6 +51,7 @@ const AppRoutes = () => (
         <Route path="/admin/mesas" element={<MesaPage noShell />} />
         <Route path="/admin/sugestoes" element={<AdminPage section="sugestoes" />} />
         <Route path="/admin/relatorios" element={<AdminPage section="relatorios" />} />
+        <Route path="/admin/configuracoes" element={<AdminPage section="configuracoes" />} />
       </Route>
     </Route>
 

@@ -4,12 +4,6 @@ import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
 import { getErrorMessage } from "../utils/error";
 
-const loginBenefits = [
-  "Acesso rapido ao fluxo de pedidos por periodo.",
-  "Reserva de almoco com validacao de horario e mesa.",
-  "Painel administrativo com relatorios e sugestao do chefe.",
-];
-
 const LoginPage = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isReady, login } = useAuth();
@@ -53,15 +47,6 @@ const LoginPage = () => {
             Faca login para montar pedidos, reservar mesas e acompanhar
             seu historico no Bravo.
           </p>
-
-          <div className="rule-list">
-            {loginBenefits.map((benefit) => (
-              <div className="rule-item" key={benefit}>
-                <span className="rule-item__index" />
-                <p>{benefit}</p>
-              </div>
-            ))}
-          </div>
 
           <div className="auth-panel__brand">
             <img src="/bravologo.png" alt="Bravo" />

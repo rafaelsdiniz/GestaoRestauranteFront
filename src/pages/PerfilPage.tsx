@@ -22,7 +22,6 @@ import {
   formatAddress,
   formatCurrency,
   formatDateTime,
-  getPeriodoLabel,
   getStatusReservaLabel,
   getTipoAtendimentoLabel,
 } from "../utils/formatters";
@@ -59,6 +58,7 @@ const PerfilPage = () => {
   const [nome, setNome] = useState(usuario?.nomeUsuario ?? "");
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [senhaAtual, setSenhaAtual] = useState("");
+  const [senhaAntiga, setSenhaAntiga] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [dadosMsg, setDadosMsg] = useState({ error: "", success: "" });
@@ -187,6 +187,10 @@ const PerfilPage = () => {
   const handleSaveSenha = async (e: FormEvent) => {
     e.preventDefault();
     setSenhaMsg({ error: "", success: "" });
+    if (!senhaAntiga.trim()) {
+      setSenhaMsg({ error: "Informe sua senha atual para confirmar a alteracao.", success: "" });
+      return;
+    }
     if (!novaSenha.trim() || novaSenha.length < 6) {
       setSenhaMsg({ error: "A nova senha deve ter pelo menos 6 caracteres.", success: "" });
       return;
@@ -197,7 +201,8 @@ const PerfilPage = () => {
     }
     setIsSavingSenha(true);
     try {
-      await atualizarUsuario(usuarioId!, { nome: usuario?.nomeUsuario ?? "", email: usuario?.email ?? "", senha: novaSenha });
+      await atualizarUsuario(usuarioId!, { nome: usuario?.nomeUsuario ?? "", email: usuario?.email ?? "", senha: novaSenha, senhaAtual: senhaAntiga });
+      setSenhaAntiga("");
       setNovaSenha("");
       setConfirmarSenha("");
       setSenhaMsg({ error: "", success: "Senha alterada com sucesso." });
@@ -343,6 +348,10 @@ const PerfilPage = () => {
           </div>
         </div>
         <form className="form-grid form-grid--two" onSubmit={handleSaveSenha}>
+          <label className="field field--full">
+            <span>Senha atual</span>
+            <input type="password" value={senhaAntiga} onChange={(e) => setSenhaAntiga(e.target.value)} placeholder="Digite sua senha atual" />
+          </label>
           <label className="field">
             <span>Nova senha</span>
             <input type="password" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} placeholder="Minimo 6 caracteres" />
