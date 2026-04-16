@@ -211,26 +211,132 @@ button {
 }
 
 .app-shell__footer {
-  border-top: 1px solid var(--border-light);
-  padding: 2rem 1.5rem;
-  text-align: center;
-  color: var(--cream-muted);
-  font-size: 0.82rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
+  background: #1C1917;
+  color: #C8C0B4;
+  padding: 0;
+  margin-top: auto;
 }
 
-.app-shell__footer-brand {
+.footer__inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 3.5rem 2rem 2.5rem;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 2.5rem;
+}
+
+.footer__logo {
+  height: 40px;
+  margin-bottom: 1rem;
+  filter: brightness(1.2);
+}
+
+.footer__tagline {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #8A8279;
+  margin-bottom: 1.25rem;
+  max-width: 280px;
+}
+
+.footer__socials {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.footer__socials a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: #C8C0B4;
+  transition: all 0.25s ease;
+}
+
+.footer__socials a:hover {
+  background: var(--gold);
+  color: #1C1917;
+  transform: translateY(-2px);
+}
+
+.footer__heading {
   font-family: var(--font-display);
   font-size: 1rem;
-  color: var(--gold-dark);
+  color: var(--gold-light);
+  margin-bottom: 1.25rem;
+  letter-spacing: 0.02em;
 }
 
-.app-shell__footer-text {
-  opacity: 0.6;
+.footer__links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.footer__links a {
+  color: #A09888;
+  text-decoration: none;
+  font-size: 0.88rem;
+  transition: color 0.2s ease;
+}
+
+.footer__links a:hover {
+  color: var(--gold-light);
+}
+
+.footer__info {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  font-size: 0.88rem;
+  color: #A09888;
+}
+
+.footer__info strong {
+  color: #C8C0B4;
+  display: inline-block;
+  min-width: 70px;
+}
+
+.footer__bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+  padding: 1.25rem 2rem;
   font-size: 0.78rem;
+  color: #6B6560;
+}
+
+@media (max-width: 900px) {
+  .footer__inner {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 540px) {
+  .footer__inner {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    padding: 2.5rem 1.5rem 2rem;
+  }
+
+  .footer__col--brand {
+    text-align: center;
+  }
+
+  .footer__tagline {
+    max-width: 100%;
+  }
+
+  .footer__socials {
+    justify-content: center;
+  }
 }
 
 /* ===== ADMIN SHELL (sidebar layout) ===== */

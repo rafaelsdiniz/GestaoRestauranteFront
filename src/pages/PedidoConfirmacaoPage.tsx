@@ -13,6 +13,8 @@ interface ConfirmacaoState {
   metodoPagamento?: string;
   viaApp?: boolean;
   nomeAplicativo?: string;
+  pagarNoCaixa?: boolean;
+  presencial?: boolean;
 }
 
 const labelMetodo: Record<string, string> = {
@@ -26,13 +28,24 @@ const PedidoConfirmacaoPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = (location.state as ConfirmacaoState | null) ?? {};
-  const { pedido, metodoPagamento, viaApp, nomeAplicativo } = state;
+  const { pedido, metodoPagamento, viaApp, nomeAplicativo, pagarNoCaixa, presencial } = state;
 
   if (!pedido) {
     return <Navigate to="/cardapio" replace />;
   }
 
-  const isDeliveryProprio = !!metodoPagamento;
+  const isPresencial = pagarNoCaixa || presencial || pedido.tipoAtendimento === "PRESENCIAL";
+  const isDeliveryProprio = !!metodoPagamento && !isPresencial;
+
+  const heroLead = viaApp && nomeAplicativo
+    ? `Seu pedido #${pedido.id} foi registrado com sucesso. Acompanhe a entrega pelo ${nomeAplicativo}.`
+    : isPresencial && pagarNoCaixa
+      ? `Seu pedido #${pedido.id} foi registrado. Dirija-se ao caixa para realizar o pagamento.`
+      : isPresencial
+        ? `Seu pedido #${pedido.id} foi registrado e o pagamento confirmado. Aguarde ser chamado!`
+        : isDeliveryProprio
+          ? `Seu pedido #${pedido.id} foi registrado com sucesso. Pagamento realizado. Acompanhe o status da entrega.`
+          : `Seu pedido #${pedido.id} foi registrado com sucesso.`;
 
   return (
     <AppShell contentClassName="page">
@@ -40,14 +53,7 @@ const PedidoConfirmacaoPage = () => {
         <div className="hero__content">
           <span className="kicker">Confirmacao</span>
           <h1>Pedido confirmado!</h1>
-          <p className="hero__lead">
-            Seu pedido #{pedido.id} foi registrado com sucesso.
-            {viaApp && nomeAplicativo
-              ? ` Acompanhe a entrega pelo ${nomeAplicativo}.`
-              : isDeliveryProprio
-                ? " Pagamento realizado. Acompanhe o status da entrega."
-                : ""}
-          </p>
+          <p className="hero__lead">{heroLead}</p>
         </div>
       </section>
 
@@ -76,6 +82,12 @@ const PedidoConfirmacaoPage = () => {
             <div>
               <span>Pagamento</span>
               <strong>{labelMetodo[metodoPagamento] ?? metodoPagamento}</strong>
+            </div>
+          )}
+          {pagarNoCaixa && (
+            <div>
+              <span>Pagamento</span>
+              <strong>No caixa</strong>
             </div>
           )}
           <div>
@@ -107,7 +119,6 @@ const PedidoConfirmacaoPage = () => {
         </div>
       </section>
 
-      {/* Via app: message */}
       {viaApp && nomeAplicativo && (
         <section className="panel panel--section">
           <div className="empty-state">
@@ -118,12 +129,22 @@ const PedidoConfirmacaoPage = () => {
         </section>
       )}
 
+      {isPresencial && pagarNoCaixa && (
+        <section className="panel panel--section">
+          <div className="empty-state">
+            <p style={{ fontSize: "1rem" }}>
+              Apresente o numero do pedido <strong>#{pedido.id}</strong> no caixa para efetuar o pagamento.
+            </p>
+          </div>
+        </section>
+      )}
+
       <div className="confirmation-actions">
         <button className="button button--primary" onClick={() => navigate("/cardapio")} type="button">
           Fazer novo pedido
         </button>
 
-        {isDeliveryProprio && (
+        {isDeliveryProprio && !isPresencial && (
           <button
             className="button button--secondary"
             onClick={() => navigate(`/pedidos/${pedido.id}/acompanhamento`)}

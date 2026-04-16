@@ -16,7 +16,7 @@ export const listarIngredientes = async (): Promise<Ingrediente[]> => {
 export const buscarIngredientePorId = async (
   id: number
 ): Promise<Ingrediente> => {
-  const { data } = await api.get<Ingrediente>(`/ingredientes/${id}`);
+  const { data } = await api.get<Ingrediente>(`/ingrediente/${id}`);
   return data;
 };
 
@@ -37,7 +37,7 @@ export const atualizarIngrediente = async (
   id: number,
   dto: IngredienteRequestDTO
 ): Promise<Ingrediente> => {
-  const { data } = await api.put<Ingrediente>(`/ingredientes/${id}`, dto);
+  const { data } = await api.put<Ingrediente>(`/ingrediente/${id}`, dto);
   return data;
 };
 
@@ -45,5 +45,5 @@ export const atualizarIngrediente = async (
 // DELETAR
 // =========================
 export const deletarIngrediente = async (id: number): Promise<void> => {
-  await api.delete(`/ingredientes/${id}`);
+  await api.delete(`/ingrediente/${id}`);
 };

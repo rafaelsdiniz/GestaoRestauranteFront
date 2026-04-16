@@ -93,7 +93,7 @@ const PagamentoPage = () => {
     setIsProcessing(true);
     setTimeout(() => {
       navigate("/pedidos/confirmacao", {
-        state: { pedido, metodoPagamento: metodo },
+        state: { pedido, metodoPagamento: metodo, presencial: isPresencial },
       });
     }, 1500);
   };
