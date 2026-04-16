@@ -3449,6 +3449,14 @@ button {
   color: var(--gold-dark);
 }
 
+.admin-table__delivery {
+  color: var(--cream);
+  display: block;
+  max-width: 260px;
+  min-width: 180px;
+  white-space: normal;
+}
+
 .admin-table__select {
   padding: 0.35rem 0.5rem;
   border-radius: var(--radius-xs);

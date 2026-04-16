@@ -242,6 +242,42 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
 
   const CHART_COLORS = ["#B08C3E", "#C9A652", "#8A6C2A", "#8b2635", "#3D8C5C", "#5BA3D9", "#D4A853"];
 
+  const isDeliveryOrder = (pedido: PedidoAdmin) =>
+    String(pedido.tipoAtendimento ?? "").toLowerCase().includes("delivery") ||
+    pedido.taxaEntrega > 0;
+
+  const formatDeliveryAddressObject = (endereco: Exclude<PedidoAdmin["endereco"], string | null | undefined>) => {
+    const ruaNumero = [endereco.rua, endereco.numero].filter(Boolean).join(", ");
+    const complemento = endereco.complemento ? ` - ${endereco.complemento}` : "";
+    const bairroCidade = [endereco.bairro, endereco.cidade].filter(Boolean).join(", ");
+    const estado = endereco.estado ? `/${endereco.estado}` : "";
+    const cep = endereco.cep ? ` - CEP ${endereco.cep}` : "";
+
+    return `${ruaNumero}${complemento}${bairroCidade ? ` - ${bairroCidade}${estado}` : ""}${cep}`.trim();
+  };
+
+  const getDeliveryAddress = (pedido: PedidoAdmin) => {
+    if (typeof pedido.endereco === "string") {
+      return pedido.endereco.trim();
+    }
+
+    if (pedido.endereco && typeof pedido.endereco === "object") {
+      const formattedAddress = formatDeliveryAddressObject(pedido.endereco);
+      if (formattedAddress) return formattedAddress;
+    }
+
+    const rawAddress =
+      pedido.enderecoEntrega ??
+      pedido.observacaoEntrega ??
+      pedido.observacao ??
+      pedido.atendimento?.enderecoEntrega ??
+      pedido.atendimento?.observacaoEntrega ??
+      pedido.atendimento?.observacao ??
+      "";
+
+    return rawAddress.replace(/^entregar em\s*/i, "").trim();
+  };
+
   const chartTooltipStyle = {
     contentStyle: {
       background: "#FFFFFF",
@@ -573,6 +609,7 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
                 <th>Data</th>
                 <th>Periodo</th>
                 <th>Tipo</th>
+                <th>Entrega</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Acoes</th>
@@ -589,6 +626,15 @@ const AdminPage = ({ section = "dashboard" }: AdminPageProps) => {
                   <td>{formatDateTime(pedido.dataHora)}</td>
                   <td>{pedido.periodo}</td>
                   <td>{pedido.tipoAtendimento}</td>
+                  <td>
+                    {isDeliveryOrder(pedido) ? (
+                      <span className="admin-table__delivery">
+                        {getDeliveryAddress(pedido) || "Endereco nao informado"}
+                      </span>
+                    ) : (
+                      <span className="admin-table__sub">--</span>
+                    )}
+                  </td>
                   <td className="admin-table__value">{formatarPreco(pedido.total)}</td>
                   <td>
                     <span className={`pill pill--sm pill--${pedido.status?.toLowerCase() === "concluido" ? "success" : pedido.status?.toLowerCase() === "cancelado" ? "danger" : "outline"}`}>
