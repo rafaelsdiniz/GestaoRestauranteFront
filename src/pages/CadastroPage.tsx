@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../contexts/useAuth";
-import { cadastrar } from "../services/AuthService";
+import { cadastrar, login as loginRequest } from "../services/AuthService";
 import { criarEndereco } from "../services/EnderecoService";
 import type { EnderecoRequestDTO } from "../types/dto/endereco/EnderecoRequestDTO";
 import { getErrorMessage } from "../utils/error";
@@ -89,7 +89,16 @@ const CadastroPage = () => {
       const usuario = await cadastrar({ nome, email, senha });
 
       if (cadastrarEnderecoInicial) {
-        await criarEndereco(usuario.id, endereco);
+        // Fazer login para obter token antes de criar o endereco
+        const loginResponse = await loginRequest({ email, senha });
+        localStorage.setItem("token", loginResponse.token);
+
+        try {
+          await criarEndereco(usuario.id, endereco);
+        } finally {
+          // Limpar token — o usuario vai logar normalmente pela tela de login
+          localStorage.removeItem("token");
+        }
       }
 
       setSucesso("Cadastro realizado com sucesso. Redirecionando para o login...");
